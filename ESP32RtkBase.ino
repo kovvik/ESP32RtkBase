@@ -5,6 +5,9 @@
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include "SPIFFS.h"
+#include <PubSubClient.h>
+#include "time.h"
+#include "settings.h"
 
 // Client ID for ESP Chip identification
 #define CLIENT_ID "ESP_%06X"
@@ -15,14 +18,33 @@ uint32_t chipId = 0;
 // Device name
 char dev_name[50];
 
-// MQTT Settings
-char mqtt_server[40] = "192.168.178.101";
-char mqtt_port[6] = "8080";
-char mqtt_username[32] = "esp";
-char mqtt_password[32] = "esp_pass";
-char mqtt_command_topic[32] = "rtk_command";
-char mqtt_ppp_topic[32] = "rtk_ppp";
-char mqtt_log_topic[32] = "rtk_log";
+
+// MQTT Client
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
+
+// MQTT reconnect
+void reconnect() {
+    Serial.println(F("Trying to connect mqtt..."));
+    if (mqttClient.connect(dev_name , mqtt_username, mqtt_password)) {
+        Serial.println(F("Connected to MQTT broker"));
+        mqttClient.subscribe(mqtt_command_topic);
+        Serial.print(F("Subscribe to topic: "));
+        Serial.println(mqtt_command_topic);
+        logToMQTT("HELLO");
+    }
+}
+
+void logToMQTT(char message[256]) {
+    StaticJsonDocument<256> logdata;
+    logdata["time"] = getTime();
+    logdata["message"] = message;
+    char out[128];
+    int b = serializeJson(logdata, out);
+    Serial.print(F("sending bytes to MQTT log:"));
+    Serial.println(b, DEC);
+    mqttClient.publish(mqtt_log_topic, out);
+}
 
 // Save config to file
 bool save_config = true;
@@ -42,6 +64,17 @@ void saveConfigToFile() {
     save_config = true;
 }
 
+unsigned long getTime() {
+  time_t now;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    //Serial.println("Failed to obtain time");
+    return(0);
+  }
+  time(&now);
+  return now;
+}
+
 void setup() {
     // Starting serial
     Serial.begin(115200);
@@ -53,7 +86,7 @@ void setup() {
     getESPInfo();
 
     //clean FS, for testing
-    SPIFFS.format();
+    //SPIFFS.format();
 
     //read configuration from FS json
     Serial.println(F("mounting FS..."));
@@ -133,7 +166,6 @@ void setup() {
 
     // Set WIFI country
     wifiManager.setCountry("US");
-    wifiManager.resetSettings();
 
     if (!wifiManager.autoConnect("ESP_TEMP", "changeit")) {
         Serial.println(F("Failed to connect, reset and try again ..."));
@@ -177,19 +209,31 @@ void setup() {
         }
         configFile.close();
     }
+
+    // Setup mqtt
+    mqttClient.setServer(mqtt_server, atoi(mqtt_port));
+
+    // Setup NTP
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 }
 
 void loop() {
+    // Connect to mqtt server
+    if (!mqttClient.connected()) {
+        reconnect();
+    }
+    mqttClient.loop();
+
     // check Wifi connection every minute
     static uint32_t lastMillis = 0;
     if (millis() - lastMillis > 60000) {
         // Check wifi connection and reconnect if connection lost
         if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("Lost connection, reconnecting to WiFi...");
+            Serial.println(F("Lost connection, reconnecting to WiFi..."));
             WiFi.disconnect();
             WiFi.reconnect();
         }
-        // Publish values and print console
+        logToMQTT("PING");
         lastMillis = millis();
     }
 }
