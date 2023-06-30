@@ -18,7 +18,6 @@ uint32_t chipId = 0;
 // Device name
 char dev_name[50];
 
-
 // MQTT Client
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -35,6 +34,7 @@ void reconnect() {
     }
 }
 
+// sends log to MQTT log topic
 void logToMQTT(char message[256]) {
     StaticJsonDocument<256> logdata;
     logdata["time"] = getTime();
@@ -44,6 +44,33 @@ void logToMQTT(char message[256]) {
     Serial.print(F("sending bytes to MQTT log:"));
     Serial.println(b, DEC);
     mqttClient.publish(mqtt_log_topic, out);
+}
+
+// sends status information to MQTT log topic
+void logStatus() {
+    // Log data
+    char wifiRSSI[5];
+    char message[20] = "WiFi RSSI:";
+    sprintf(wifiRSSI, "%d", WiFi.RSSI());
+    strcat(message, wifiRSSI);
+    logToMQTT(message);
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    char message[length + 1];
+    memcpy(message, payload, length);
+    message[length] = '\0';
+    Serial.print("Message arrived on command topic: ");
+    Serial.println(message);
+    //for (int i = 0; i < length; i++) {
+    //    Serial.print((char)payload[i]);
+    //}
+    //Serial.println();
+    if ( strcmp(message, "PING") == 0 ) {
+        logToMQTT("PONG");
+    } else {
+        Serial.println(F("Unknown command"));
+    }
 }
 
 // Save config to file
@@ -210,30 +237,32 @@ void setup() {
         configFile.close();
     }
 
-    // Setup mqtt
-    mqttClient.setServer(mqtt_server, atoi(mqtt_port));
-
     // Setup NTP
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+    // Setup mqtt
+    mqttClient.setServer(mqtt_server, atoi(mqtt_port));
+    mqttClient.setCallback(mqttCallback);
+    reconnect();
 }
 
 void loop() {
-    // Connect to mqtt server
-    if (!mqttClient.connected()) {
-        reconnect();
-    }
-    mqttClient.loop();
-
     // check Wifi connection every minute
     static uint32_t lastMillis = 0;
     if (millis() - lastMillis > 60000) {
+        // Reconnect to mqtt server
+        if (!mqttClient.connected()) {
+            reconnect();
+        }
         // Check wifi connection and reconnect if connection lost
         if (WiFi.status() != WL_CONNECTED) {
             Serial.println(F("Lost connection, reconnecting to WiFi..."));
             WiFi.disconnect();
             WiFi.reconnect();
         }
-        logToMQTT("PING");
+        logStatus();
         lastMillis = millis();
+    } else {
+        mqttClient.loop();
     }
 }
