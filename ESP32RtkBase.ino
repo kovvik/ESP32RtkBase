@@ -1,10 +1,11 @@
 #include <FS.h>
-#include <WiFi.h>
-#include <DNSServer.h>
-#include <WebServer.h>
+#include <WiFiClientSecure.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include "SPIFFS.h"
+#include <PubSubClient.h>
+#include "time.h"
+#include "settings.h"
 
 // Client ID for ESP Chip identification
 #define CLIENT_ID "ESP_%06X"
@@ -13,16 +14,71 @@
 uint32_t chipId = 0;
 
 // Device name
-char dev_name[50];
+char host[50];
 
-// MQTT Settings
-char mqtt_server[40] = "192.168.178.101";
-char mqtt_port[6] = "8080";
-char mqtt_username[32] = "esp";
-char mqtt_password[32] = "esp_pass";
-char mqtt_command_topic[32] = "rtk_command";
-char mqtt_ppp_topic[32] = "rtk_ppp";
-char mqtt_log_topic[32] = "rtk_log";
+// MQTT Client
+WiFiClientSecure espClient;
+PubSubClient mqttClient(espClient);
+WiFiManager wifiManager;
+
+// MQTT reconnect
+void reconnect() {
+    Serial.println(F("Trying to connect mqtt..."));
+    if (mqttClient.connect(host)) {
+        Serial.println(F("Connected to MQTT broker"));
+        mqttClient.subscribe(mqtt_command_topic);
+        Serial.print(F("Subscribe to topic: "));
+        Serial.println(mqtt_command_topic);
+        logToMQTT("HELLO");
+    }
+}
+
+// sends log to MQTT log topic
+void logToMQTT(char message[256]) {
+    StaticJsonDocument<256> logdata;
+    logdata["time"] = getTime();
+    logdata["host"] = host;
+    logdata["message"] = message;
+    char out[128];
+    int b = serializeJson(logdata, out);
+    Serial.print(F("sending bytes to MQTT log:"));
+    Serial.println(b, DEC);
+    mqttClient.publish(mqtt_log_topic, out);
+}
+
+// sends status information to MQTT log topic
+void logStatus() {
+    // Log data
+    char wifiRSSI[5];
+    char message[20] = "WiFi RSSI:";
+    sprintf(wifiRSSI, "%d", WiFi.RSSI());
+    strcat(message, wifiRSSI);
+    logToMQTT(message);
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    char message[length + 1];
+    memcpy(message, payload, length);
+    message[length] = '\0';
+    Serial.print("Message arrived on command topic: ");
+    Serial.println(message);
+    if ( strcmp(message, "PING") == 0 ) {
+        logToMQTT("PONG");
+    } else if ( strcmp(message, "REBOOT") == 0 ) {
+        logToMQTT("Rebooting");
+        delay(1000);
+        ESP.restart();
+    } else if ( strcmp(message, "RESET") == 0 ) {
+        logToMQTT("Reset settings");
+        wifiManager.resetSettings();
+        WiFi.disconnect(true);
+        SPIFFS.format();
+        delay(2000);
+        ESP.restart();
+    } else {
+        Serial.println(F("Unknown command"));
+    }
+}
 
 // Save config to file
 bool save_config = true;
@@ -32,14 +88,24 @@ void getESPInfo() {
         chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
     }
     Serial.println(chipId);
-    sprintf(dev_name, CLIENT_ID, chipId);
-    Serial.println(dev_name);
+    sprintf(host, CLIENT_ID, chipId);
+    Serial.println(host);
 }
 
 // Save config callback
 void saveConfigToFile() {
     Serial.println("should save config");
     save_config = true;
+}
+
+unsigned long getTime() {
+  time_t now;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    return(0);
+  }
+  time(&now);
+  return now;
 }
 
 void setup() {
@@ -53,7 +119,7 @@ void setup() {
     getESPInfo();
 
     //clean FS, for testing
-    SPIFFS.format();
+    //SPIFFS.format();
 
     //read configuration from FS json
     Serial.println(F("mounting FS..."));
@@ -75,8 +141,6 @@ void setup() {
                     Serial.println(F("The parsed json:"));
                     strlcpy(mqtt_server, configJson["mqtt_server"], sizeof(mqtt_server));
                     strlcpy(mqtt_port, configJson["mqtt_port"], sizeof(mqtt_port));
-                    strlcpy(mqtt_username, configJson["mqtt_username"], sizeof(mqtt_username));
-                    strlcpy(mqtt_password, configJson["mqtt_password"], sizeof(mqtt_password));
                     strlcpy(mqtt_command_topic, configJson["mqtt_command_topic"], sizeof(mqtt_command_topic));
                     strlcpy(mqtt_ppp_topic, configJson["mqtt_ppp_topic"], sizeof(mqtt_ppp_topic));
                     strlcpy(mqtt_log_topic, configJson["mqtt_log_topic"], sizeof(mqtt_log_topic));
@@ -84,10 +148,6 @@ void setup() {
                     Serial.println(mqtt_server);
                     Serial.print(F("mqtt_port: "));
                     Serial.println(mqtt_port);
-                    Serial.print(F("mqtt_username: "));
-                    Serial.println(mqtt_username);
-                    Serial.print(F("mqtt_password: "));
-                    Serial.println(mqtt_password);
                     Serial.print(F("mqtt_command_topic: "));
                     Serial.println(mqtt_command_topic);
                     Serial.print(F("mqtt_ppp_topic: "));
@@ -110,8 +170,6 @@ void setup() {
     // Additional MQTT parameters to WiFiManager
     WiFiManagerParameter custom_mqtt_server("Server", "mqtt_server", mqtt_server, sizeof(mqtt_server));
     WiFiManagerParameter custom_mqtt_port("Port", "mqtt_port", mqtt_port, sizeof(mqtt_port));
-    WiFiManagerParameter custom_mqtt_username("Username", "mqtt_username", mqtt_username, sizeof(mqtt_username));
-    WiFiManagerParameter custom_mqtt_password("Password", "mqtt_password", mqtt_password, sizeof(mqtt_password));
     WiFiManagerParameter custom_mqtt_command_topic("mqtt_command_topic", "mqtt_command_topic", mqtt_command_topic, sizeof(mqtt_command_topic));
     WiFiManagerParameter custom_mqtt_ppp_topic("mqtt_ppp_topic", "mqtt_ppp_topic", mqtt_ppp_topic, sizeof(mqtt_ppp_topic));
     WiFiManagerParameter custom_mqtt_log_topic("mqtt_log_topic", "mqtt_log_topic", mqtt_log_topic, sizeof(mqtt_log_topic));
@@ -122,8 +180,6 @@ void setup() {
 
     wifiManager.addParameter(&custom_mqtt_server);
     wifiManager.addParameter(&custom_mqtt_port);
-    wifiManager.addParameter(&custom_mqtt_username);
-    wifiManager.addParameter(&custom_mqtt_password);
     wifiManager.addParameter(&custom_mqtt_command_topic);
     wifiManager.addParameter(&custom_mqtt_ppp_topic);
     wifiManager.addParameter(&custom_mqtt_log_topic);
@@ -133,7 +189,6 @@ void setup() {
 
     // Set WIFI country
     wifiManager.setCountry("US");
-    wifiManager.resetSettings();
 
     if (!wifiManager.autoConnect("ESP_TEMP", "changeit")) {
         Serial.println(F("Failed to connect, reset and try again ..."));
@@ -148,8 +203,6 @@ void setup() {
 
     strcpy(mqtt_server, custom_mqtt_server.getValue());
     strcpy(mqtt_port, custom_mqtt_port.getValue());
-    strcpy(mqtt_username, custom_mqtt_username.getValue());
-    strcpy(mqtt_password, custom_mqtt_password.getValue());
     strcpy(mqtt_command_topic, custom_mqtt_command_topic.getValue());
     strcpy(mqtt_ppp_topic, custom_mqtt_ppp_topic.getValue());
     strcpy(mqtt_log_topic, custom_mqtt_log_topic.getValue());
@@ -159,8 +212,6 @@ void setup() {
         DynamicJsonDocument jsonConfig(512);
         jsonConfig["mqtt_server"] = mqtt_server;
         jsonConfig["mqtt_port"] = mqtt_port;
-        jsonConfig["mqtt_username"] = mqtt_username;
-        jsonConfig["mqtt_password"] = mqtt_password;
         jsonConfig["mqtt_command_topic"] = mqtt_command_topic;
         jsonConfig["mqtt_ppp_topic"] = mqtt_ppp_topic;
         jsonConfig["mqtt_log_topic"] = mqtt_log_topic;
@@ -177,19 +228,36 @@ void setup() {
         }
         configFile.close();
     }
+
+    // Setup NTP
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+    // Setup mqtt
+    espClient.setCACert(mqtt_ca);
+    espClient.setCertificate(mqtt_cert);
+    espClient.setPrivateKey(mqtt_key);
+    mqttClient.setServer(mqtt_server, atoi(mqtt_port));
+    mqttClient.setCallback(mqttCallback);
+    reconnect();
 }
 
 void loop() {
     // check Wifi connection every minute
     static uint32_t lastMillis = 0;
     if (millis() - lastMillis > 60000) {
+        // Reconnect to mqtt server
+        if (!mqttClient.connected()) {
+            reconnect();
+        }
         // Check wifi connection and reconnect if connection lost
         if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("Lost connection, reconnecting to WiFi...");
+            Serial.println(F("Lost connection, reconnecting to WiFi..."));
             WiFi.disconnect();
             WiFi.reconnect();
         }
-        // Publish values and print console
+        logStatus();
         lastMillis = millis();
+    } else {
+        mqttClient.loop();
     }
 }
