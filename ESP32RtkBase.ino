@@ -14,7 +14,7 @@
 uint32_t chipId = 0;
 
 // Device name
-char dev_name[50];
+char host[50];
 
 // MQTT Client
 WiFiClientSecure espClient;
@@ -24,7 +24,7 @@ WiFiManager wifiManager;
 // MQTT reconnect
 void reconnect() {
     Serial.println(F("Trying to connect mqtt..."));
-    if (mqttClient.connect(dev_name)) {
+    if (mqttClient.connect(host)) {
         Serial.println(F("Connected to MQTT broker"));
         mqttClient.subscribe(mqtt_command_topic);
         Serial.print(F("Subscribe to topic: "));
@@ -37,6 +37,7 @@ void reconnect() {
 void logToMQTT(char message[256]) {
     StaticJsonDocument<256> logdata;
     logdata["time"] = getTime();
+    logdata["host"] = host;
     logdata["message"] = message;
     char out[128];
     int b = serializeJson(logdata, out);
@@ -87,8 +88,8 @@ void getESPInfo() {
         chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
     }
     Serial.println(chipId);
-    sprintf(dev_name, CLIENT_ID, chipId);
-    Serial.println(dev_name);
+    sprintf(host, CLIENT_ID, chipId);
+    Serial.println(host);
 }
 
 // Save config callback
