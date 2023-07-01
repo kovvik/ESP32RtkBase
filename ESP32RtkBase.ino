@@ -19,6 +19,7 @@ char dev_name[50];
 // MQTT Client
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
+WiFiManager wifiManager;
 
 // MQTT reconnect
 void reconnect() {
@@ -62,6 +63,17 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     Serial.println(message);
     if ( strcmp(message, "PING") == 0 ) {
         logToMQTT("PONG");
+    } else if ( strcmp(message, "REBOOT") == 0 ) {
+        logToMQTT("Rebooting");
+        delay(1000);
+        ESP.restart();
+    } else if ( strcmp(message, "RESET") == 0 ) {
+        logToMQTT("Reset settings");
+        wifiManager.resetSettings();
+        WiFi.disconnect(true);
+        SPIFFS.format();
+        delay(2000);
+        ESP.restart();
     } else {
         Serial.println(F("Unknown command"));
     }
