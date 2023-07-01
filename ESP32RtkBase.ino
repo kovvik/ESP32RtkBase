@@ -1,7 +1,5 @@
 #include <FS.h>
-#include <WiFi.h>
-#include <DNSServer.h>
-#include <WebServer.h>
+#include <WiFiClientSecure.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include "SPIFFS.h"
@@ -19,13 +17,13 @@ uint32_t chipId = 0;
 char dev_name[50];
 
 // MQTT Client
-WiFiClient espClient;
+WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
 
 // MQTT reconnect
 void reconnect() {
     Serial.println(F("Trying to connect mqtt..."));
-    if (mqttClient.connect(dev_name , mqtt_username, mqtt_password)) {
+    if (mqttClient.connect(dev_name)) {
         Serial.println(F("Connected to MQTT broker"));
         mqttClient.subscribe(mqtt_command_topic);
         Serial.print(F("Subscribe to topic: "));
@@ -62,10 +60,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     message[length] = '\0';
     Serial.print("Message arrived on command topic: ");
     Serial.println(message);
-    //for (int i = 0; i < length; i++) {
-    //    Serial.print((char)payload[i]);
-    //}
-    //Serial.println();
     if ( strcmp(message, "PING") == 0 ) {
         logToMQTT("PONG");
     } else {
@@ -95,7 +89,6 @@ unsigned long getTime() {
   time_t now;
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
-    //Serial.println("Failed to obtain time");
     return(0);
   }
   time(&now);
@@ -135,8 +128,6 @@ void setup() {
                     Serial.println(F("The parsed json:"));
                     strlcpy(mqtt_server, configJson["mqtt_server"], sizeof(mqtt_server));
                     strlcpy(mqtt_port, configJson["mqtt_port"], sizeof(mqtt_port));
-                    strlcpy(mqtt_username, configJson["mqtt_username"], sizeof(mqtt_username));
-                    strlcpy(mqtt_password, configJson["mqtt_password"], sizeof(mqtt_password));
                     strlcpy(mqtt_command_topic, configJson["mqtt_command_topic"], sizeof(mqtt_command_topic));
                     strlcpy(mqtt_ppp_topic, configJson["mqtt_ppp_topic"], sizeof(mqtt_ppp_topic));
                     strlcpy(mqtt_log_topic, configJson["mqtt_log_topic"], sizeof(mqtt_log_topic));
@@ -144,10 +135,6 @@ void setup() {
                     Serial.println(mqtt_server);
                     Serial.print(F("mqtt_port: "));
                     Serial.println(mqtt_port);
-                    Serial.print(F("mqtt_username: "));
-                    Serial.println(mqtt_username);
-                    Serial.print(F("mqtt_password: "));
-                    Serial.println(mqtt_password);
                     Serial.print(F("mqtt_command_topic: "));
                     Serial.println(mqtt_command_topic);
                     Serial.print(F("mqtt_ppp_topic: "));
@@ -170,8 +157,6 @@ void setup() {
     // Additional MQTT parameters to WiFiManager
     WiFiManagerParameter custom_mqtt_server("Server", "mqtt_server", mqtt_server, sizeof(mqtt_server));
     WiFiManagerParameter custom_mqtt_port("Port", "mqtt_port", mqtt_port, sizeof(mqtt_port));
-    WiFiManagerParameter custom_mqtt_username("Username", "mqtt_username", mqtt_username, sizeof(mqtt_username));
-    WiFiManagerParameter custom_mqtt_password("Password", "mqtt_password", mqtt_password, sizeof(mqtt_password));
     WiFiManagerParameter custom_mqtt_command_topic("mqtt_command_topic", "mqtt_command_topic", mqtt_command_topic, sizeof(mqtt_command_topic));
     WiFiManagerParameter custom_mqtt_ppp_topic("mqtt_ppp_topic", "mqtt_ppp_topic", mqtt_ppp_topic, sizeof(mqtt_ppp_topic));
     WiFiManagerParameter custom_mqtt_log_topic("mqtt_log_topic", "mqtt_log_topic", mqtt_log_topic, sizeof(mqtt_log_topic));
@@ -182,8 +167,6 @@ void setup() {
 
     wifiManager.addParameter(&custom_mqtt_server);
     wifiManager.addParameter(&custom_mqtt_port);
-    wifiManager.addParameter(&custom_mqtt_username);
-    wifiManager.addParameter(&custom_mqtt_password);
     wifiManager.addParameter(&custom_mqtt_command_topic);
     wifiManager.addParameter(&custom_mqtt_ppp_topic);
     wifiManager.addParameter(&custom_mqtt_log_topic);
@@ -207,8 +190,6 @@ void setup() {
 
     strcpy(mqtt_server, custom_mqtt_server.getValue());
     strcpy(mqtt_port, custom_mqtt_port.getValue());
-    strcpy(mqtt_username, custom_mqtt_username.getValue());
-    strcpy(mqtt_password, custom_mqtt_password.getValue());
     strcpy(mqtt_command_topic, custom_mqtt_command_topic.getValue());
     strcpy(mqtt_ppp_topic, custom_mqtt_ppp_topic.getValue());
     strcpy(mqtt_log_topic, custom_mqtt_log_topic.getValue());
@@ -218,8 +199,6 @@ void setup() {
         DynamicJsonDocument jsonConfig(512);
         jsonConfig["mqtt_server"] = mqtt_server;
         jsonConfig["mqtt_port"] = mqtt_port;
-        jsonConfig["mqtt_username"] = mqtt_username;
-        jsonConfig["mqtt_password"] = mqtt_password;
         jsonConfig["mqtt_command_topic"] = mqtt_command_topic;
         jsonConfig["mqtt_ppp_topic"] = mqtt_ppp_topic;
         jsonConfig["mqtt_log_topic"] = mqtt_log_topic;
@@ -241,6 +220,9 @@ void setup() {
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
     // Setup mqtt
+    espClient.setCACert(mqtt_ca);
+    espClient.setCertificate(mqtt_cert);
+    espClient.setPrivateKey(mqtt_key);
     mqttClient.setServer(mqtt_server, atoi(mqtt_port));
     mqttClient.setCallback(mqttCallback);
     reconnect();
