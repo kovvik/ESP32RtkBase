@@ -27,6 +27,12 @@ int numSFRBX = 0;
 int numRAWX = 0;
 bool collectRAWX = false;
 
+// RTK Variable
+long lastSentRTCM_ms = 0;
+int maxTimeBeforeHangup_ms = 10000;
+uint32_t serverBytesSent = 0;
+long lastReport_ms = 0;
+
 // MQTT Client
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
@@ -291,11 +297,6 @@ void setup() {
     Wire.begin();
     myGNSS.setFileBufferSize(fileBufferSize);
 
-    //if (!myGNSS.setPacketCfgPayloadSize(3000)) {
-    //    Serial.println(F("setPacketCfgPayloadSize failed. You will not be able to poll RAWX data. Freezing."));
-    //    while (1); // Do nothing more
-    //}
-
     while (myGNSS.begin() == false) {
         Serial.println(F("u-blox GNSS not detected at default I2C address. Retrying..."));
         delay(1000);
@@ -312,6 +313,36 @@ void setup() {
         myGNSS.logRXMSFRBX();
         myGNSS.setAutoRXMRAWXcallbackPtr(&newRAWX);
         myGNSS.logRXMRAWX();
+    } else if (strcmp(main_mode, "RTK") == 0) {
+        Serial.println(F("Main mode: RTK"));
+        myGNSS.setI2COutput(COM_TYPE_UBX | COM_TYPE_NMEA | COM_TYPE_RTCM3);
+        myGNSS.setNavigationFrequency(1);
+        bool response = myGNSS.newCfgValset(VAL_LAYER_RAM); // Use cfgValset to disable individual NMEA messages
+        // Disable NMEA messages
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_NMEA_ID_GLL_I2C, 0);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_NMEA_ID_GSA_I2C, 0);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_NMEA_ID_GSV_I2C, 0);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_NMEA_ID_GST_I2C, 0);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_NMEA_ID_RMC_I2C, 0);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_NMEA_ID_VTG_I2C, 0);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_NMEA_ID_GGA_I2C, 0);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_NMEA_ID_ZDA_I2C, 0);
+        response &= myGNSS.sendCfgValset();
+        //Enable necessary RTCM sentences
+        response &= myGNSS.newCfgValset(VAL_LAYER_RAM);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_RTCM_3X_TYPE1005_I2C, 1);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_RTCM_3X_TYPE1074_I2C, 1);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_RTCM_3X_TYPE1084_I2C, 1);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_RTCM_3X_TYPE1094_I2C, 1);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_RTCM_3X_TYPE1124_I2C, 1);
+        response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_RTCM_3X_TYPE1230_I2C, 10);
+        response &= myGNSS.sendCfgValset();
+        // Setup base station location
+        response &= myGNSS.setStaticPosition(-128020830, -80, -471680384, -70, 408666581, 10, false, VAL_LAYER_RAM);
+        if (response == false) {
+            Serial.println(F("Setup failed. Freezing..."));
+            while (1);
+        }
     } else {
         Serial.println(F("No main mode set!"));
     }
