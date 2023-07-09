@@ -51,9 +51,9 @@ void reconnect() {
     Serial.println(F("Trying to connect mqtt..."));
     if (mqttClient.connect(host)) {
         Serial.println(F("Connected to MQTT broker"));
-        mqttClient.subscribe(mqtt_command_topic);
+        mqttClient.subscribe(mqttCommandTopic);
         Serial.print(F("Subscribe to topic: "));
-        Serial.println(mqtt_command_topic);
+        Serial.println(mqttCommandTopic);
         logToMQTT("HELLO");
     }
 }
@@ -68,7 +68,7 @@ void logToMQTT(char message[256]) {
     int b = serializeJson(logdata, out);
     Serial.print(F("sending bytes to MQTT log:"));
     Serial.println(b, DEC);
-    mqttClient.publish(mqtt_log_topic, out);
+    mqttClient.publish(mqttLogTopic, out);
 }
 
 // sends status information to MQTT log topic
@@ -102,13 +102,13 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         ESP.restart();
     } else if ( strcmp(message, "MODE_RTK") == 0 ) {
         logToMQTT("Setting main mode to RTK");
-        strcpy(main_mode, "RTK");
+        strcpy(mainMode, "RTK");
         saveConfigToFile();
         delay(5000);
         ESP.restart();
     } else if ( strcmp(message, "MODE_PPP") == 0 ) {
         logToMQTT("Setting main mode to PPP");
-        strcpy(main_mode, "PPP");
+        strcpy(mainMode, "PPP");
         saveConfigToFile();
         delay(5000);
         ESP.restart();
@@ -144,12 +144,12 @@ void saveConfigToFileCallback() {
 void saveConfigToFile() {
     Serial.println("Saving config ...");
     DynamicJsonDocument jsonConfig(1024);
-    jsonConfig["mqtt_server"] = mqtt_server;
-    jsonConfig["mqtt_port"] = mqtt_port;
-    jsonConfig["mqtt_command_topic"] = mqtt_command_topic;
-    jsonConfig["mqtt_ppp_topic"] = mqtt_ppp_topic;
-    jsonConfig["mqtt_log_topic"] = mqtt_log_topic;
-    jsonConfig["main_mode"] = main_mode;
+    jsonConfig["mqttServer"] = mqttServer;
+    jsonConfig["mqttPort"] = mqttPort;
+    jsonConfig["mqttCommandTopic"] = mqttCommandTopic;
+    jsonConfig["mqttPppTopic"] = mqttPppTopic;
+    jsonConfig["mqttLogTopic"] = mqttLogTopic;
+    jsonConfig["mainMode"] = mainMode;
     jsonConfig["latitude"] = latitude;
     jsonConfig["latitudeHP"] = latitudeHP;
     jsonConfig["longitude"] = longitude;
@@ -223,30 +223,30 @@ void setup() {
                 DeserializationError error = deserializeJson(configJson, configFile);
                 if (!error) {
                     Serial.println(F("The parsed json:"));
-                    strlcpy(mqtt_server, configJson["mqtt_server"], sizeof(mqtt_server));
-                    strlcpy(mqtt_port, configJson["mqtt_port"], sizeof(mqtt_port));
-                    strlcpy(mqtt_command_topic, configJson["mqtt_command_topic"], sizeof(mqtt_command_topic));
-                    strlcpy(mqtt_ppp_topic, configJson["mqtt_ppp_topic"], sizeof(mqtt_ppp_topic));
-                    strlcpy(mqtt_log_topic, configJson["mqtt_log_topic"], sizeof(mqtt_log_topic));
-                    strlcpy(main_mode, configJson["main_mode"], sizeof(main_mode));
+                    strlcpy(mqttServer, configJson["mqttServer"], sizeof(mqttServer));
+                    strlcpy(mqttPort, configJson["mqttPort"], sizeof(mqttPort));
+                    strlcpy(mqttCommandTopic, configJson["mqttCommandTopic"], sizeof(mqttCommandTopic));
+                    strlcpy(mqttPppTopic, configJson["mqttPppTopic"], sizeof(mqttPppTopic));
+                    strlcpy(mqttLogTopic, configJson["mqttLogTopic"], sizeof(mqttLogTopic));
+                    strlcpy(mainMode, configJson["mainMode"], sizeof(mainMode));
                     strlcpy(longitude, configJson["longitude"], sizeof(longitude));
                     strlcpy(longitudeHP, configJson["longitudeHP"], sizeof(longitudeHP));
                     strlcpy(latitude, configJson["latitude"], sizeof(latitude));
                     strlcpy(latitudeHP, configJson["latitudeHP"], sizeof(latitudeHP));
                     strlcpy(altitude, configJson["altitude"], sizeof(altitude));
                     strlcpy(altitudeHP, configJson["altitudeHP"], sizeof(altitudeHP));
-                    Serial.print(F("mqtt_server: "));
-                    Serial.println(mqtt_server);
-                    Serial.print(F("mqtt_port: "));
-                    Serial.println(mqtt_port);
-                    Serial.print(F("mqtt_command_topic: "));
-                    Serial.println(mqtt_command_topic);
-                    Serial.print(F("mqtt_ppp_topic: "));
-                    Serial.println(mqtt_ppp_topic);
-                    Serial.print(F("mqtt_log_topic: "));
-                    Serial.println(mqtt_log_topic);
-                    Serial.print(F("main_mode: "));
-                    Serial.println(main_mode);
+                    Serial.print(F("mqttServer: "));
+                    Serial.println(mqttServer);
+                    Serial.print(F("mqttPort: "));
+                    Serial.println(mqttPort);
+                    Serial.print(F("mqttCommandTopic: "));
+                    Serial.println(mqttCommandTopic);
+                    Serial.print(F("mqttPppTopic: "));
+                    Serial.println(mqttPppTopic);
+                    Serial.print(F("mqttLogTopic: "));
+                    Serial.println(mqttLogTopic);
+                    Serial.print(F("mainMode: "));
+                    Serial.println(mainMode);
                     Serial.print(F("longitude: "));
                     Serial.println(longitude);
                     Serial.print(F("longitudeHP: "));
@@ -274,27 +274,27 @@ void setup() {
     }
 
     // Additional MQTT parameters to WiFiManager
-    WiFiManagerParameter custom_mqtt_server("Server", "mqtt_server", mqtt_server, sizeof(mqtt_server));
-    WiFiManagerParameter custom_mqtt_port("Port", "mqtt_port", mqtt_port, sizeof(mqtt_port));
-    WiFiManagerParameter custom_mqtt_command_topic("mqtt_command_topic", "mqtt_command_topic", mqtt_command_topic, sizeof(mqtt_command_topic));
-    WiFiManagerParameter custom_mqtt_ppp_topic("mqtt_ppp_topic", "mqtt_ppp_topic", mqtt_ppp_topic, sizeof(mqtt_ppp_topic));
-    WiFiManagerParameter custom_mqtt_log_topic("mqtt_log_topic", "mqtt_log_topic", mqtt_log_topic, sizeof(mqtt_log_topic));
-    WiFiManagerParameter customLatitude("latitude", "latitude", latitude, sizeof(latitude));
-    WiFiManagerParameter customLatitudeHP("latitudeHP", "latitude HP", latitudeHP, sizeof(latitudeHP));
-    WiFiManagerParameter customLongitude("longitude", "longitude", longitude, sizeof(longitude));
-    WiFiManagerParameter customLongitudeHP("longitudeHP", "longitude HP", longitude, sizeof(longitudeHP));
-    WiFiManagerParameter customAltitude("altitude", "altitude", altitude, sizeof(altitude));
-    WiFiManagerParameter customAltitudeHP("altitudeHP", "altitude HP", altitude, sizeof(altitudeHP));
+    WiFiManagerParameter customMqttServer("mqttServer", "MQTT Server", mqttServer, sizeof(mqttServer));
+    WiFiManagerParameter customMqttPort("mqttPort", "MQTT Port", mqttPort, sizeof(mqttPort));
+    WiFiManagerParameter customMqttCommandTopic("mqttCommandTopic", "MQTT Command Topic", mqttCommandTopic, sizeof(mqttCommandTopic));
+    WiFiManagerParameter customMqttPppTopic("mqttPppTopic", "MQTT PPP Topic", mqttPppTopic, sizeof(mqttPppTopic));
+    WiFiManagerParameter customMqttLogTopic("mqttLogTopic", "MQTT Log Topic", mqttLogTopic, sizeof(mqttLogTopic));
+    WiFiManagerParameter customLatitude("latitude", "Latitude", latitude, sizeof(latitude));
+    WiFiManagerParameter customLatitudeHP("latitudeHP", "Latitude (high precision)", latitudeHP, sizeof(latitudeHP));
+    WiFiManagerParameter customLongitude("longitude", "Longitude", longitude, sizeof(longitude));
+    WiFiManagerParameter customLongitudeHP("longitudeHP", "Longitude (high precision)", longitude, sizeof(longitudeHP));
+    WiFiManagerParameter customAltitude("altitude", "Altitude", altitude, sizeof(altitude));
+    WiFiManagerParameter customAltitudeHP("altitudeHP", "Altitude (high precision)", altitude, sizeof(altitudeHP));
 
     WiFiManager wifiManager;
     wifiManager.setSaveConfigCallback(saveConfigToFileCallback);
     wifiManager.setConfigPortalTimeout(240);
 
-    wifiManager.addParameter(&custom_mqtt_server);
-    wifiManager.addParameter(&custom_mqtt_port);
-    wifiManager.addParameter(&custom_mqtt_command_topic);
-    wifiManager.addParameter(&custom_mqtt_ppp_topic);
-    wifiManager.addParameter(&custom_mqtt_log_topic);
+    wifiManager.addParameter(&customMqttServer);
+    wifiManager.addParameter(&customMqttPort);
+    wifiManager.addParameter(&customMqttCommandTopic);
+    wifiManager.addParameter(&customMqttPppTopic);
+    wifiManager.addParameter(&customMqttLogTopic);
     wifiManager.addParameter(&customLatitude);
     wifiManager.addParameter(&customLatitudeHP);
     wifiManager.addParameter(&customLongitude);
@@ -319,12 +319,11 @@ void setup() {
     Serial.print(F("My IP is: "));
     Serial.println(WiFi.localIP());
 
-    strcpy(mqtt_server, custom_mqtt_server.getValue());
-    strcpy(mqtt_port, custom_mqtt_port.getValue());
-    strcpy(mqtt_command_topic, custom_mqtt_command_topic.getValue());
-    strcpy(mqtt_ppp_topic, custom_mqtt_ppp_topic.getValue());
-    strcpy(mqtt_log_topic, custom_mqtt_log_topic.getValue());
-    strcpy(mqtt_log_topic, custom_mqtt_log_topic.getValue());
+    strcpy(mqttServer, customMqttServer.getValue());
+    strcpy(mqttPort, customMqttPort.getValue());
+    strcpy(mqttCommandTopic, customMqttCommandTopic.getValue());
+    strcpy(mqttPppTopic, customMqttPppTopic.getValue());
+    strcpy(mqttLogTopic, customMqttLogTopic.getValue());
     strcpy(latitude, customLatitude.getValue());
     strcpy(latitudeHP, customLatitudeHP.getValue());
     strcpy(longitude, customLongitude.getValue());
@@ -339,7 +338,7 @@ void setup() {
     espClient.setCACert(mqtt_ca);
     espClient.setCertificate(mqtt_cert);
     espClient.setPrivateKey(mqtt_key);
-    mqttClient.setServer(mqtt_server, atoi(mqtt_port));
+    mqttClient.setServer(mqttServer, atoi(mqttPort));
     mqttClient.setCallback(mqttCallback);
     reconnect();
 
@@ -354,7 +353,7 @@ void setup() {
 
     Serial.println(F("u-blox GNSS detected."));
 
-    if (strcmp(main_mode, "PPP") == 0) {
+    if (strcmp(mainMode, "PPP") == 0) {
         Serial.println(F("Main mode: PPP"));
         myGNSS.setI2COutput(COM_TYPE_UBX);
         myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
@@ -363,7 +362,7 @@ void setup() {
         myGNSS.logRXMSFRBX();
         myGNSS.setAutoRXMRAWXcallbackPtr(&newRAWX);
         myGNSS.logRXMRAWX();
-    } else if (strcmp(main_mode, "RTK") == 0) {
+    } else if (strcmp(mainMode, "RTK") == 0) {
         Serial.println(F("Main mode: RTK"));
         myGNSS.setI2COutput(COM_TYPE_UBX | COM_TYPE_NMEA | COM_TYPE_RTCM3);
         myGNSS.setNavigationFrequency(1);
@@ -402,12 +401,12 @@ void setup() {
 }
 
 void loop() {
-    if (strcmp(main_mode, "PPP") == 0 && collectRAWX) {
+    if (strcmp(mainMode, "PPP") == 0 && collectRAWX) {
         myGNSS.checkUblox();
         myGNSS.checkCallbacks();
         while (myGNSS.fileBufferAvailable() >= mqttSendMaxSize) {
             myGNSS.extractFileBufferData(myBuffer, mqttSendMaxSize);
-            if (mqttClient.publish(mqtt_ppp_topic, myBuffer, mqttSendMaxSize)) {
+            if (mqttClient.publish(mqttPppTopic, myBuffer, mqttSendMaxSize)) {
                 Serial.println(F("RAWX data sent to MQTT"));
             } else {
                 Serial.println(F("Couldn't send data to MQTT"));
@@ -446,14 +445,14 @@ void loop() {
         logStatus();
         lastMillis = millis();
     } else {
-        if (strcmp(main_mode, "PPP") == 0 && !collectRAWX) {
+        if (strcmp(mainMode, "PPP") == 0 && !collectRAWX) {
             uint16_t remainingBytes = myGNSS.fileBufferAvailable();
             while (remainingBytes > 0) {
                 uint16_t bytesToWrite = remainingBytes;
                 if (bytesToWrite > mqttSendMaxSize) {
                     bytesToWrite = mqttSendMaxSize;
                 }
-                if (mqttClient.publish(mqtt_ppp_topic, myBuffer, bytesToWrite)) {
+                if (mqttClient.publish(mqttPppTopic, myBuffer, bytesToWrite)) {
                     Serial.println(F("RAWX data sent to MQTT"));
                 } else {
                     Serial.println(F("Couldn't send data to MQTT"));
