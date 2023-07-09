@@ -33,6 +33,14 @@ int maxTimeBeforeHangup_ms = 10000;
 uint32_t serverBytesSent = 0;
 long lastReport_ms = 0;
 
+// Location variables
+char latitude[12];
+char latitudeHP[3];
+char longitude[12];
+char longitudeHP[3];
+char altitude[12];
+char altitudeHP[3];
+
 // MQTT Client
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
@@ -142,6 +150,12 @@ void saveConfigToFile() {
     jsonConfig["mqtt_ppp_topic"] = mqtt_ppp_topic;
     jsonConfig["mqtt_log_topic"] = mqtt_log_topic;
     jsonConfig["main_mode"] = main_mode;
+    jsonConfig["latitude"] = latitude;
+    jsonConfig["latitudeHP"] = latitudeHP;
+    jsonConfig["longitude"] = longitude;
+    jsonConfig["longitudeHP"] = longitudeHP;
+    jsonConfig["altitude"] = altitude;
+    jsonConfig["altitudeHP"] = altitudeHP;
 
     File configFile = SPIFFS.open("/config.json", "w");
     if (configFile) {
@@ -215,6 +229,12 @@ void setup() {
                     strlcpy(mqtt_ppp_topic, configJson["mqtt_ppp_topic"], sizeof(mqtt_ppp_topic));
                     strlcpy(mqtt_log_topic, configJson["mqtt_log_topic"], sizeof(mqtt_log_topic));
                     strlcpy(main_mode, configJson["main_mode"], sizeof(main_mode));
+                    strlcpy(longitude, configJson["longitude"], sizeof(longitude));
+                    strlcpy(longitudeHP, configJson["longitudeHP"], sizeof(longitudeHP));
+                    strlcpy(latitude, configJson["latitude"], sizeof(latitude));
+                    strlcpy(latitudeHP, configJson["latitudeHP"], sizeof(latitudeHP));
+                    strlcpy(altitude, configJson["altitude"], sizeof(altitude));
+                    strlcpy(altitudeHP, configJson["altitudeHP"], sizeof(altitudeHP));
                     Serial.print(F("mqtt_server: "));
                     Serial.println(mqtt_server);
                     Serial.print(F("mqtt_port: "));
@@ -227,6 +247,18 @@ void setup() {
                     Serial.println(mqtt_log_topic);
                     Serial.print(F("main_mode: "));
                     Serial.println(main_mode);
+                    Serial.print(F("longitude: "));
+                    Serial.println(longitude);
+                    Serial.print(F("longitudeHP: "));
+                    Serial.println(longitudeHP);
+                    Serial.print(F("latitude: "));
+                    Serial.println(latitude);
+                    Serial.print(F("latitudeHP: "));
+                    Serial.println(latitudeHP);
+                    Serial.print(F("altitude: "));
+                    Serial.println(altitude);
+                    Serial.print(F("altitudeHP: "));
+                    Serial.println(altitudeHP);
                 } else {
                     Serial.print(F("Json parse error: "));
                     Serial.println(error.f_str());
@@ -247,6 +279,12 @@ void setup() {
     WiFiManagerParameter custom_mqtt_command_topic("mqtt_command_topic", "mqtt_command_topic", mqtt_command_topic, sizeof(mqtt_command_topic));
     WiFiManagerParameter custom_mqtt_ppp_topic("mqtt_ppp_topic", "mqtt_ppp_topic", mqtt_ppp_topic, sizeof(mqtt_ppp_topic));
     WiFiManagerParameter custom_mqtt_log_topic("mqtt_log_topic", "mqtt_log_topic", mqtt_log_topic, sizeof(mqtt_log_topic));
+    WiFiManagerParameter customLatitude("latitude", "latitude", latitude, sizeof(latitude));
+    WiFiManagerParameter customLatitudeHP("latitudeHP", "latitude HP", latitudeHP, sizeof(latitudeHP));
+    WiFiManagerParameter customLongitude("longitude", "longitude", longitude, sizeof(longitude));
+    WiFiManagerParameter customLongitudeHP("longitudeHP", "longitude HP", longitude, sizeof(longitudeHP));
+    WiFiManagerParameter customAltitude("altitude", "altitude", altitude, sizeof(altitude));
+    WiFiManagerParameter customAltitudeHP("altitudeHP", "altitude HP", altitude, sizeof(altitudeHP));
 
     WiFiManager wifiManager;
     wifiManager.setSaveConfigCallback(saveConfigToFileCallback);
@@ -257,6 +295,12 @@ void setup() {
     wifiManager.addParameter(&custom_mqtt_command_topic);
     wifiManager.addParameter(&custom_mqtt_ppp_topic);
     wifiManager.addParameter(&custom_mqtt_log_topic);
+    wifiManager.addParameter(&customLatitude);
+    wifiManager.addParameter(&customLatitudeHP);
+    wifiManager.addParameter(&customLongitude);
+    wifiManager.addParameter(&customLongitudeHP);
+    wifiManager.addParameter(&customAltitude);
+    wifiManager.addParameter(&customAltitudeHP);
 
     // Set WIFI connection timeout to avoid endless loop
     wifiManager.setConnectTimeout(60);
@@ -280,7 +324,13 @@ void setup() {
     strcpy(mqtt_command_topic, custom_mqtt_command_topic.getValue());
     strcpy(mqtt_ppp_topic, custom_mqtt_ppp_topic.getValue());
     strcpy(mqtt_log_topic, custom_mqtt_log_topic.getValue());
-
+    strcpy(mqtt_log_topic, custom_mqtt_log_topic.getValue());
+    strcpy(latitude, customLatitude.getValue());
+    strcpy(latitudeHP, customLatitudeHP.getValue());
+    strcpy(longitude, customLongitude.getValue());
+    strcpy(longitudeHP, customLongitudeHP.getValue());
+    strcpy(altitude, customAltitude.getValue());
+    strcpy(altitudeHP, customAltitudeHP.getValue());
 
     // Setup NTP
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
