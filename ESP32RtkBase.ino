@@ -55,16 +55,17 @@ void reconnect() {
         Serial.print(F("Subscribe to topic: "));
         Serial.println(mqttCommandTopic);
         logToMQTT("HELLO");
+        logSettings();
     }
 }
 
 // sends log to MQTT log topic
-void logToMQTT(char message[256]) {
-    StaticJsonDocument<256> logdata;
+void logToMQTT(char message[512]) {
+    StaticJsonDocument<512> logdata;
     logdata["time"] = getTime();
     logdata["host"] = host;
     logdata["message"] = message;
-    char out[128];
+    char out[512];
     int b = serializeJson(logdata, out);
     Serial.print(F("sending bytes to MQTT log:"));
     Serial.println(b, DEC);
@@ -81,6 +82,17 @@ void logStatus() {
     logToMQTT(message);
 }
 
+void logSettings() {
+    // Log data
+    char out[512];
+    StaticJsonDocument<512> logdata;
+    logdata["time"] = getTime();
+    logdata["host"] = host;
+    logdata["settings"] = getConfigJson(); 
+    serializeJson(logdata, out);
+    mqttClient.publish(mqttLogTopic, out);
+}
+
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     char message[length + 1];
     memcpy(message, payload, length);
@@ -89,6 +101,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     Serial.println(message);
     if ( strcmp(message, "PING") == 0 ) {
         logToMQTT("PONG");
+        logSettings();
     } else if ( strcmp(message, "REBOOT") == 0 ) {
         logToMQTT("Rebooting");
         delay(1000);
@@ -124,7 +137,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 // Save config to file
-bool save_config = false;
+bool save_config = true;
 
 void getESPInfo() {
     for(int i=0; i<17; i=i+8) {
@@ -141,8 +154,7 @@ void saveConfigToFileCallback() {
     save_config = true;
 }
 
-void saveConfigToFile() {
-    Serial.println("Saving config ...");
+DynamicJsonDocument getConfigJson() {
     DynamicJsonDocument jsonConfig(1024);
     jsonConfig["mqttServer"] = mqttServer;
     jsonConfig["mqttPort"] = mqttPort;
@@ -156,7 +168,12 @@ void saveConfigToFile() {
     jsonConfig["longitudeHP"] = longitudeHP;
     jsonConfig["altitude"] = altitude;
     jsonConfig["altitudeHP"] = altitudeHP;
+    return jsonConfig;
+}
 
+void saveConfigToFile() {
+    Serial.println("Saving config ...");
+    DynamicJsonDocument jsonConfig = getConfigJson();
     File configFile = SPIFFS.open("/config.json", "w");
     if (configFile) {
         if (serializeJson(jsonConfig, configFile) == 0) {
@@ -340,6 +357,7 @@ void setup() {
     espClient.setPrivateKey(mqtt_key);
     mqttClient.setServer(mqttServer, atoi(mqttPort));
     mqttClient.setCallback(mqttCallback);
+    mqttClient.setBufferSize(512);
     reconnect();
 
     // GPS Setup
