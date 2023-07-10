@@ -33,14 +33,6 @@ int maxTimeBeforeHangup_ms = 10000;
 uint32_t serverBytesSent = 0;
 long lastReport_ms = 0;
 
-// Location variables
-char latitude[12];
-char latitudeHP[3];
-char longitude[12];
-char longitudeHP[3];
-char altitude[12];
-char altitudeHP[3];
-
 // MQTT Client
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);

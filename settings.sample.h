@@ -21,6 +21,14 @@ char mqttLogTopic[32];
 //
 char mainMode[4];
 
+// Location variables
+char latitude[12];
+char latitudeHP[3];
+char longitude[12];
+char longitudeHP[3];
+char altitude[12];
+char altitudeHP[3];
+
 // NTP Settings
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 3600; 
