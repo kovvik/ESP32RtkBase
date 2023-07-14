@@ -160,6 +160,10 @@ DynamicJsonDocument getConfigJson() {
     jsonConfig["longitudeHP"] = longitudeHP;
     jsonConfig["altitude"] = altitude;
     jsonConfig["altitudeHP"] = altitudeHP;
+    jsonConfig["ntripHost"] = ntripHost;
+    jsonConfig["ntripPort"] = ntripPort;
+    jsonConfig["ntripMountPoint"] = ntripMountPoint;
+    jsonConfig["ntripPassword"] = ntripPassword;
     return jsonConfig;
 }
 
@@ -244,6 +248,10 @@ void setup() {
                     strlcpy(latitudeHP, configJson["latitudeHP"], sizeof(latitudeHP));
                     strlcpy(altitude, configJson["altitude"], sizeof(altitude));
                     strlcpy(altitudeHP, configJson["altitudeHP"], sizeof(altitudeHP));
+                    strlcpy(ntripHost, configJson["ntripHost"], sizeof(ntripHost));
+                    strlcpy(ntripPort, configJson["ntripPort"], sizeof(ntripPort));
+                    strlcpy(ntripMountPoint, configJson["ntripMountPoint"], sizeof(ntripMountPoint));
+                    strlcpy(ntripPassword, configJson["ntripPassword"], sizeof(ntripPassword));
                     Serial.print(F("mqttServer: "));
                     Serial.println(mqttServer);
                     Serial.print(F("mqttPort: "));
@@ -268,6 +276,14 @@ void setup() {
                     Serial.println(altitude);
                     Serial.print(F("altitudeHP: "));
                     Serial.println(altitudeHP);
+                    Serial.print(F("ntripHost: "));
+                    Serial.println(ntripHost);
+                    Serial.print(F("ntripPort: "));
+                    Serial.println(ntripPort);
+                    Serial.print(F("ntripMountPoint: "));
+                    Serial.println(ntripMountPoint);
+                    Serial.print(F("ntripPassword: "));
+                    Serial.println(ntripPassword);
                 } else {
                     Serial.print(F("Json parse error: "));
                     Serial.println(error.f_str());
@@ -294,6 +310,10 @@ void setup() {
     WiFiManagerParameter customLongitudeHP("longitudeHP", "Longitude (high precision)", longitude, sizeof(longitudeHP));
     WiFiManagerParameter customAltitude("altitude", "Altitude", altitude, sizeof(altitude));
     WiFiManagerParameter customAltitudeHP("altitudeHP", "Altitude (high precision)", altitude, sizeof(altitudeHP));
+    WiFiManagerParameter customNtripHost("ntripHost", "NTRIP Host:", ntripHost, sizeof(ntripHost));
+    WiFiManagerParameter customNtripPort("ntripPort", "NTRIP Port:", ntripPort, sizeof(ntripPort));
+    WiFiManagerParameter customNtripMountPoint("ntripMountPoint", "NTRIP Mount Point:", ntripMountPoint, sizeof(ntripMountPoint));
+    WiFiManagerParameter customNtripPassword("ntripPassword", "NTRIP Password:", ntripPassword, sizeof(ntripPassword));
 
     WiFiManager wifiManager;
     wifiManager.setSaveConfigCallback(saveConfigToFileCallback);
@@ -310,6 +330,10 @@ void setup() {
     wifiManager.addParameter(&customLongitudeHP);
     wifiManager.addParameter(&customAltitude);
     wifiManager.addParameter(&customAltitudeHP);
+    wifiManager.addParameter(&customNtripHost);
+    wifiManager.addParameter(&customNtripPort);
+    wifiManager.addParameter(&customNtripMountPoint);
+    wifiManager.addParameter(&customNtripPassword);
 
     // Set WIFI connection timeout to avoid endless loop
     wifiManager.setConnectTimeout(60);
@@ -339,6 +363,10 @@ void setup() {
     strcpy(longitudeHP, customLongitudeHP.getValue());
     strcpy(altitude, customAltitude.getValue());
     strcpy(altitudeHP, customAltitudeHP.getValue());
+    strcpy(ntripHost, customNtripHost.getValue());
+    strcpy(ntripPort, customNtripPort.getValue());
+    strcpy(ntripMountPoint, customNtripMountPoint.getValue());
+    strcpy(ntripPassword, customNtripPassword.getValue());
 
     // Setup NTP
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);

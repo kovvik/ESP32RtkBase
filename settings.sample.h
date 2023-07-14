@@ -29,6 +29,12 @@ char longitudeHP[3];
 char altitude[12];
 char altitudeHP[3];
 
+// NTRIP Caster settings
+char ntripHost[128];
+char ntripPort[5];
+char ntripMountPoint[8];
+char ntripPassword[32];
+
 // NTP Settings
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 3600; 
