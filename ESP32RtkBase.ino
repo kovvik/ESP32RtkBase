@@ -167,6 +167,65 @@ DynamicJsonDocument getConfigJson() {
     return jsonConfig;
 }
 
+void getConfigFromJson(char* configFile) {
+    DynamicJsonDocument configJson(1024);
+    DeserializationError error = deserializeJson(configJson, configFile);
+    if (!error) {
+        Serial.println(F("The parsed json:"));
+        strlcpy(mqttServer, configJson["mqttServer"], sizeof(mqttServer));
+        strlcpy(mqttPort, configJson["mqttPort"], sizeof(mqttPort));
+        strlcpy(mqttCommandTopic, configJson["mqttCommandTopic"], sizeof(mqttCommandTopic));
+        strlcpy(mqttPppTopic, configJson["mqttPppTopic"], sizeof(mqttPppTopic));
+        strlcpy(mqttLogTopic, configJson["mqttLogTopic"], sizeof(mqttLogTopic));
+        strlcpy(mainMode, configJson["mainMode"], sizeof(mainMode));
+        strlcpy(longitude, configJson["longitude"], sizeof(longitude));
+        strlcpy(longitudeHP, configJson["longitudeHP"], sizeof(longitudeHP));
+        strlcpy(latitude, configJson["latitude"], sizeof(latitude));
+        strlcpy(latitudeHP, configJson["latitudeHP"], sizeof(latitudeHP));
+        strlcpy(altitude, configJson["altitude"], sizeof(altitude));
+        strlcpy(altitudeHP, configJson["altitudeHP"], sizeof(altitudeHP));
+        strlcpy(ntripHost, configJson["ntripHost"], sizeof(ntripHost));
+        strlcpy(ntripPort, configJson["ntripPort"], sizeof(ntripPort));
+        strlcpy(ntripMountPoint, configJson["ntripMountPoint"], sizeof(ntripMountPoint));
+        strlcpy(ntripPassword, configJson["ntripPassword"], sizeof(ntripPassword));
+        Serial.print(F("mqttServer: "));
+        Serial.println(mqttServer);
+        Serial.print(F("mqttPort: "));
+        Serial.println(mqttPort);
+        Serial.print(F("mqttCommandTopic: "));
+        Serial.println(mqttCommandTopic);
+        Serial.print(F("mqttPppTopic: "));
+        Serial.println(mqttPppTopic);
+        Serial.print(F("mqttLogTopic: "));
+        Serial.println(mqttLogTopic);
+        Serial.print(F("mainMode: "));
+        Serial.println(mainMode);
+        Serial.print(F("longitude: "));
+        Serial.println(longitude);
+        Serial.print(F("longitudeHP: "));
+        Serial.println(longitudeHP);
+        Serial.print(F("latitude: "));
+        Serial.println(latitude);
+        Serial.print(F("latitudeHP: "));
+        Serial.println(latitudeHP);
+        Serial.print(F("altitude: "));
+        Serial.println(altitude);
+        Serial.print(F("altitudeHP: "));
+        Serial.println(altitudeHP);
+        Serial.print(F("ntripHost: "));
+        Serial.println(ntripHost);
+        Serial.print(F("ntripPort: "));
+        Serial.println(ntripPort);
+        Serial.print(F("ntripMountPoint: "));
+        Serial.println(ntripMountPoint);
+        Serial.print(F("ntripPassword: "));
+        Serial.println(ntripPassword);
+    } else {
+        Serial.print(F("Json parse error: "));
+        Serial.println(error.f_str());
+    }
+}
+
 void saveConfigToFile() {
     Serial.println("Saving config ...");
     DynamicJsonDocument jsonConfig = getConfigJson();
@@ -228,66 +287,13 @@ void setup() {
             File configFile = SPIFFS.open("/config.json", "r");
             if (configFile) {
                 Serial.println(F("opened config file"));
-                // size_t size = configFile.size();
+                size_t size = configFile.size();
                 // // Allocate a buffer to store contents of the file.
-                // std::unique_ptr<char[]> buf(new char[size]);
-                // configFile.readBytes(buf.get(), size);
-                DynamicJsonDocument configJson(1024);
-                DeserializationError error = deserializeJson(configJson, configFile);
-                if (!error) {
-                    Serial.println(F("The parsed json:"));
-                    strlcpy(mqttServer, configJson["mqttServer"], sizeof(mqttServer));
-                    strlcpy(mqttPort, configJson["mqttPort"], sizeof(mqttPort));
-                    strlcpy(mqttCommandTopic, configJson["mqttCommandTopic"], sizeof(mqttCommandTopic));
-                    strlcpy(mqttPppTopic, configJson["mqttPppTopic"], sizeof(mqttPppTopic));
-                    strlcpy(mqttLogTopic, configJson["mqttLogTopic"], sizeof(mqttLogTopic));
-                    strlcpy(mainMode, configJson["mainMode"], sizeof(mainMode));
-                    strlcpy(longitude, configJson["longitude"], sizeof(longitude));
-                    strlcpy(longitudeHP, configJson["longitudeHP"], sizeof(longitudeHP));
-                    strlcpy(latitude, configJson["latitude"], sizeof(latitude));
-                    strlcpy(latitudeHP, configJson["latitudeHP"], sizeof(latitudeHP));
-                    strlcpy(altitude, configJson["altitude"], sizeof(altitude));
-                    strlcpy(altitudeHP, configJson["altitudeHP"], sizeof(altitudeHP));
-                    strlcpy(ntripHost, configJson["ntripHost"], sizeof(ntripHost));
-                    strlcpy(ntripPort, configJson["ntripPort"], sizeof(ntripPort));
-                    strlcpy(ntripMountPoint, configJson["ntripMountPoint"], sizeof(ntripMountPoint));
-                    strlcpy(ntripPassword, configJson["ntripPassword"], sizeof(ntripPassword));
-                    Serial.print(F("mqttServer: "));
-                    Serial.println(mqttServer);
-                    Serial.print(F("mqttPort: "));
-                    Serial.println(mqttPort);
-                    Serial.print(F("mqttCommandTopic: "));
-                    Serial.println(mqttCommandTopic);
-                    Serial.print(F("mqttPppTopic: "));
-                    Serial.println(mqttPppTopic);
-                    Serial.print(F("mqttLogTopic: "));
-                    Serial.println(mqttLogTopic);
-                    Serial.print(F("mainMode: "));
-                    Serial.println(mainMode);
-                    Serial.print(F("longitude: "));
-                    Serial.println(longitude);
-                    Serial.print(F("longitudeHP: "));
-                    Serial.println(longitudeHP);
-                    Serial.print(F("latitude: "));
-                    Serial.println(latitude);
-                    Serial.print(F("latitudeHP: "));
-                    Serial.println(latitudeHP);
-                    Serial.print(F("altitude: "));
-                    Serial.println(altitude);
-                    Serial.print(F("altitudeHP: "));
-                    Serial.println(altitudeHP);
-                    Serial.print(F("ntripHost: "));
-                    Serial.println(ntripHost);
-                    Serial.print(F("ntripPort: "));
-                    Serial.println(ntripPort);
-                    Serial.print(F("ntripMountPoint: "));
-                    Serial.println(ntripMountPoint);
-                    Serial.print(F("ntripPassword: "));
-                    Serial.println(ntripPassword);
-                } else {
-                    Serial.print(F("Json parse error: "));
-                    Serial.println(error.f_str());
-                }
+                std::unique_ptr<char[]> buf(new char[size]);
+                configFile.readBytes(buf.get(), size);
+                getConfigFromJson(buf.get());
+            } else {
+                Serial.println(F("File read error!"));
             }
         }
     } else {
