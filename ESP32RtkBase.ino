@@ -123,6 +123,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     } else if ( strcmp(message, "STOP_PPP") == 0 ) {
         logToMQTT("Stopping RAWX collection");
         collectRAWX = false;
+    } else if (strncmp(message, "SETTINGS:", 9) == 0) {
+        logToMQTT("New settings received");
+        int settingsLength = sizeof(message) - 9;
+        char settingsJson[settingsLength];
+        memcpy(settingsJson, &message[9], settingsLength);
+        getConfigFromJson(settingsJson);
+        saveConfigToFile();
+        logSettings();
     } else {
         Serial.println(F("Unknown command"));
     }
@@ -172,54 +180,87 @@ void getConfigFromJson(char* configFile) {
     DeserializationError error = deserializeJson(configJson, configFile);
     if (!error) {
         Serial.println(F("The parsed json:"));
-        strlcpy(mqttServer, configJson["mqttServer"], sizeof(mqttServer));
-        strlcpy(mqttPort, configJson["mqttPort"], sizeof(mqttPort));
-        strlcpy(mqttCommandTopic, configJson["mqttCommandTopic"], sizeof(mqttCommandTopic));
-        strlcpy(mqttPppTopic, configJson["mqttPppTopic"], sizeof(mqttPppTopic));
-        strlcpy(mqttLogTopic, configJson["mqttLogTopic"], sizeof(mqttLogTopic));
-        strlcpy(mainMode, configJson["mainMode"], sizeof(mainMode));
-        strlcpy(longitude, configJson["longitude"], sizeof(longitude));
-        strlcpy(longitudeHP, configJson["longitudeHP"], sizeof(longitudeHP));
-        strlcpy(latitude, configJson["latitude"], sizeof(latitude));
-        strlcpy(latitudeHP, configJson["latitudeHP"], sizeof(latitudeHP));
-        strlcpy(altitude, configJson["altitude"], sizeof(altitude));
-        strlcpy(altitudeHP, configJson["altitudeHP"], sizeof(altitudeHP));
-        strlcpy(ntripHost, configJson["ntripHost"], sizeof(ntripHost));
-        strlcpy(ntripPort, configJson["ntripPort"], sizeof(ntripPort));
-        strlcpy(ntripMountPoint, configJson["ntripMountPoint"], sizeof(ntripMountPoint));
-        strlcpy(ntripPassword, configJson["ntripPassword"], sizeof(ntripPassword));
-        Serial.print(F("mqttServer: "));
-        Serial.println(mqttServer);
-        Serial.print(F("mqttPort: "));
-        Serial.println(mqttPort);
-        Serial.print(F("mqttCommandTopic: "));
-        Serial.println(mqttCommandTopic);
-        Serial.print(F("mqttPppTopic: "));
-        Serial.println(mqttPppTopic);
-        Serial.print(F("mqttLogTopic: "));
-        Serial.println(mqttLogTopic);
-        Serial.print(F("mainMode: "));
-        Serial.println(mainMode);
-        Serial.print(F("longitude: "));
-        Serial.println(longitude);
-        Serial.print(F("longitudeHP: "));
-        Serial.println(longitudeHP);
-        Serial.print(F("latitude: "));
-        Serial.println(latitude);
-        Serial.print(F("latitudeHP: "));
-        Serial.println(latitudeHP);
-        Serial.print(F("altitude: "));
-        Serial.println(altitude);
-        Serial.print(F("altitudeHP: "));
-        Serial.println(altitudeHP);
-        Serial.print(F("ntripHost: "));
-        Serial.println(ntripHost);
-        Serial.print(F("ntripPort: "));
-        Serial.println(ntripPort);
-        Serial.print(F("ntripMountPoint: "));
-        Serial.println(ntripMountPoint);
-        Serial.print(F("ntripPassword: "));
-        Serial.println(ntripPassword);
+        
+        if (configJson["mqttServer"]) {
+            strlcpy(mqttServer, configJson["mqttServer"], sizeof(mqttServer));
+            Serial.print(F("mqttServer: "));
+            Serial.println(mqttServer);
+        }
+        if (configJson["mqttPort"]) {
+            strlcpy(mqttPort, configJson["mqttPort"], sizeof(mqttPort));
+            Serial.print(F("mqttPort: "));
+            Serial.println(mqttPort);
+        }
+        if (configJson["mqttCommandTopic"]) {
+            strlcpy(mqttCommandTopic, configJson["mqttCommandTopic"], sizeof(mqttCommandTopic));
+            Serial.print(F("mqttCommandTopic: "));
+            Serial.println(mqttCommandTopic);
+        }
+        if (configJson["mqttCommandTopic"]) {
+            strlcpy(mqttPppTopic, configJson["mqttPppTopic"], sizeof(mqttPppTopic));
+            Serial.print(F("mqttPppTopic: "));
+            Serial.println(mqttPppTopic);
+        }
+        if (configJson["mqttLogTopic"]) {
+            strlcpy(mqttLogTopic, configJson["mqttLogTopic"], sizeof(mqttLogTopic));
+            Serial.print(F("mqttLogTopic: "));
+            Serial.println(mqttLogTopic);
+        }
+        if (configJson["mainMode"]) {
+            strlcpy(mainMode, configJson["mainMode"], sizeof(mainMode));
+            Serial.print(F("mainMode: "));
+            Serial.println(mainMode);
+        }
+        if (configJson["longitude"]) {
+            strlcpy(longitude, configJson["longitude"], sizeof(longitude));
+            Serial.print(F("longitude: "));
+            Serial.println(longitude);
+        }
+        if (configJson["longitudeHP"]) {
+            strlcpy(longitudeHP, configJson["longitudeHP"], sizeof(longitudeHP));
+            Serial.print(F("longitudeHP: "));
+            Serial.println(longitudeHP);
+        }
+        if (configJson["latitude"]) {
+            strlcpy(latitude, configJson["latitude"], sizeof(latitude));
+            Serial.print(F("latitude: "));
+            Serial.println(latitude);
+        }
+        if (configJson["latitudeHP"]) {
+            strlcpy(latitudeHP, configJson["latitudeHP"], sizeof(latitudeHP));
+            Serial.print(F("latitudeHP: "));
+            Serial.println(latitudeHP);
+        }
+        if (configJson["altitude"]) {
+            strlcpy(altitude, configJson["altitude"], sizeof(altitude));
+            Serial.print(F("altitude: "));
+            Serial.println(altitude);
+        }
+        if (configJson["altitudeHP"]) {
+            strlcpy(altitudeHP, configJson["altitudeHP"], sizeof(altitudeHP));
+            Serial.print(F("altitudeHP: "));
+            Serial.println(altitudeHP);
+        }
+        if (configJson["ntripHost"]) {
+            strlcpy(ntripHost, configJson["ntripHost"], sizeof(ntripHost));
+            Serial.print(F("ntripHost: "));
+            Serial.println(ntripHost);
+        }
+        if (configJson["ntripPort"]) {
+            strlcpy(ntripPort, configJson["ntripPort"], sizeof(ntripPort));
+            Serial.print(F("ntripPort: "));
+            Serial.println(ntripPort);
+        }
+        if (configJson["ntripMountPoint"]) {
+            strlcpy(ntripMountPoint, configJson["ntripMountPoint"], sizeof(ntripMountPoint));
+            Serial.print(F("ntripMountPoint: "));
+            Serial.println(ntripMountPoint);
+        }
+        if (configJson["ntripPassword"]) {
+            strlcpy(ntripPassword, configJson["ntripPassword"], sizeof(ntripPassword));
+            Serial.print(F("ntripPassword: "));
+            Serial.println(ntripPassword);
+        }
     } else {
         Serial.print(F("Json parse error: "));
         Serial.println(error.f_str());
