@@ -26,8 +26,10 @@ uint8_t *myBuffer;
 int numSFRBX = 0;
 int numRAWX = 0;
 bool collectRAWX = false;
+bool runNtrip = false;
 
-// RTK Variable
+// RTK Variables
+WiFiClient ntripCaster;
 long lastSentRTCM_ms = 0;
 int maxTimeBeforeHangup_ms = 10000;
 uint32_t serverBytesSent = 0;
@@ -123,6 +125,12 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     } else if ( strcmp(message, "STOP_PPP") == 0 ) {
         logToMQTT("Stopping RAWX collection");
         collectRAWX = false;
+    } else if ( strcmp(message, "START_RTK") == 0 ) {
+        logToMQTT("Starting ntrip server");
+        runNtrip = true;
+    } else if ( strcmp(message, "STOP_RTK") == 0 ) {
+        logToMQTT("Stopping ntrip server");
+        runNtrip = false;
     } else if (strncmp(message, "SETTINGS:", 9) == 0) {
         logToMQTT("New settings received");
         int settingsLength = sizeof(message) - 9;
@@ -475,7 +483,16 @@ void setup() {
         response &= myGNSS.addCfgValset(UBLOX_CFG_MSGOUT_RTCM_3X_TYPE1230_I2C, 10);
         response &= myGNSS.sendCfgValset();
         // Setup base station location
-        response &= myGNSS.setStaticPosition(-128020830, -80, -471680384, -70, 408666581, 10, false, VAL_LAYER_RAM);
+        response &= myGNSS.setStaticPosition(
+                atoi(latitude),
+                atoi(latitudeHP),
+                atoi(longitude),
+                atoi(longitudeHP),
+                atoi(altitude),
+                atoi(altitudeHP),
+                false,
+                VAL_LAYER_RAM
+        );
         if (response == false) {
             Serial.println(F("Setup failed"));
             logToMQTT("Setup failed");
@@ -502,6 +519,8 @@ void loop() {
             myGNSS.checkUblox();
             myGNSS.checkCallbacks();
         }
+    } else if (strcmp(mainMode, "RTK") == 0 && runNtrip) {
+        
     }
     // check Wifi connection every minute
     static uint32_t lastMillis = 0;
