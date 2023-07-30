@@ -425,6 +425,7 @@ void setup() {
     mqttClient.setServer(mqttServer, atoi(mqttPort));
     mqttClient.setCallback(mqttCallback);
     mqttClient.setBufferSize(512);
+    myBuffer = new uint8_t[mqttSendMaxSize];
     reconnect();
 
     // GPS Setup
@@ -433,10 +434,12 @@ void setup() {
 
     while (myGNSS.begin() == false) {
         Serial.println(F("u-blox GNSS not detected at default I2C address. Retrying..."));
+        logToMQTT("u-blox GNSS not detected at default I2C address. Retrying...");
         delay(1000);
     }
 
-    Serial.println(F("u-blox GNSS detected."));
+    Serial.println(F("u-blox GNSS detected"));
+    logToMQTT("u-blox GNSS detected");
 
     if (strcmp(mainMode, "PPP") == 0) {
         Serial.println(F("Main mode: PPP"));
@@ -474,13 +477,13 @@ void setup() {
         // Setup base station location
         response &= myGNSS.setStaticPosition(-128020830, -80, -471680384, -70, 408666581, 10, false, VAL_LAYER_RAM);
         if (response == false) {
-            Serial.println(F("Setup failed. Freezing..."));
-            while (1);
+            Serial.println(F("Setup failed"));
+            logToMQTT("Setup failed");
+            strcpy(mainMode, "ERR");
         }
     } else {
         Serial.println(F("No main mode set!"));
     }
-    myBuffer = new uint8_t[mqttSendMaxSize];
     Serial.println(F("u-blox setup completed."));
 
 }
