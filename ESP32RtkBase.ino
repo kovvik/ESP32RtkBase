@@ -61,8 +61,7 @@ void logToMQTT(char message[512]) {
     logdata["message"] = message;
     char out[512];
     int b = serializeJson(logdata, out);
-    Serial.print(F("sending bytes to MQTT log:"));
-    Serial.println(b, DEC);
+    Serial.println(out);
     mqttClient.publish(mqttLogTopic, out);
 }
 
@@ -76,6 +75,7 @@ void logStatus() {
     logToMQTT(message);
 }
 
+// logs settings to MQTT log topic
 void logSettings() {
     // Log data
     char out[512];
@@ -87,6 +87,7 @@ void logSettings() {
     mqttClient.publish(mqttLogTopic, out);
 }
 
+// MQTT Callback, sets behavior based on commands
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     char message[length + 1];
     memcpy(message, payload, length);
@@ -140,13 +141,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         saveConfigToFile();
         logSettings();
     } else {
-        Serial.println(F("Unknown command"));
+        logToMQTT("Unknown command received");
     }
 }
 
 // Save config to file
 bool save_config = true;
 
+// Gets ESP info and prints to serial
 void getESPInfo() {
     for(int i=0; i<17; i=i+8) {
         chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
@@ -162,6 +164,7 @@ void saveConfigToFileCallback() {
     save_config = true;
 }
 
+// Returns a JSON document containing all config
 DynamicJsonDocument getConfigJson() {
     DynamicJsonDocument jsonConfig(1024);
     jsonConfig["mqttServer"] = mqttServer;
@@ -183,6 +186,7 @@ DynamicJsonDocument getConfigJson() {
     return jsonConfig;
 }
 
+// Sets config from a serialized JSON string
 void getConfigFromJson(char* configFile) {
     DynamicJsonDocument configJson(1024);
     DeserializationError error = deserializeJson(configJson, configFile);
@@ -274,6 +278,7 @@ void getConfigFromJson(char* configFile) {
     }
 }
 
+// Saves config to SPIFFS filesystem as serialized JSON
 void saveConfigToFile() {
     Serial.println("Saving config ...");
     DynamicJsonDocument jsonConfig = getConfigJson();
@@ -291,6 +296,7 @@ void saveConfigToFile() {
     save_config = false;
 }
 
+// Returns current epoch
 unsigned long getTime() {
   time_t now;
   struct tm timeinfo;
@@ -455,16 +461,13 @@ void setup() {
     myGNSS.setFileBufferSize(fileBufferSize);
 
     while (myGNSS.begin() == false) {
-        Serial.println(F("u-blox GNSS not detected at default I2C address. Retrying..."));
         logToMQTT("u-blox GNSS not detected at default I2C address. Retrying...");
         delay(1000);
     }
-
-    Serial.println(F("u-blox GNSS detected"));
     logToMQTT("u-blox GNSS detected");
 
     if (strcmp(mainMode, "PPP") == 0) {
-        Serial.println(F("Main mode: PPP"));
+        logToMQTT("Main mode: PPP, setting up u-blox GNSS");
         myGNSS.setI2COutput(COM_TYPE_UBX);
         myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
         myGNSS.setNavigationFrequency(1);
@@ -473,7 +476,7 @@ void setup() {
         myGNSS.setAutoRXMRAWXcallbackPtr(&newRAWX);
         myGNSS.logRXMRAWX();
     } else if (strcmp(mainMode, "RTK") == 0) {
-        Serial.println(F("Main mode: RTK"));
+        logToMQTT("Main mode: RTK, setting up u-blox GNSS");
         myGNSS.setI2COutput(COM_TYPE_UBX | COM_TYPE_NMEA | COM_TYPE_RTCM3);
         myGNSS.setNavigationFrequency(1);
         bool response = myGNSS.newCfgValset(VAL_LAYER_RAM); // Use cfgValset to disable individual NMEA messages
@@ -508,18 +511,14 @@ void setup() {
                 VAL_LAYER_RAM
         );
         if (response == false) {
-            Serial.println(F("Setup failed"));
-            logToMQTT("Setup failed");
+            logToMQTT("RTK mode setup failed");
             strcpy(mainMode, "ERR");
         }
     } else {
-        Serial.println(F("No main mode set!"));
+        logToMQTT("No main mode set");
+        strcpy(mainMode, "ERR");
     }
-    Serial.println(F("u-blox setup completed."));
-
-    char * p = strchr (ntripHost, ' ');  // search for space
-    if (p)     // if found truncate at space
-        *p = '\0';
+    logToMQTT("u-blox setup completed");
 }
 
 void loop() {
@@ -530,9 +529,9 @@ void loop() {
         while (myGNSS.fileBufferAvailable() >= mqttSendMaxSize) {
             myGNSS.extractFileBufferData(myBuffer, mqttSendMaxSize);
             if (mqttClient.publish(mqttPppTopic, myBuffer, mqttSendMaxSize)) {
-                Serial.println(F("RAWX data sent to MQTT"));
+                logToMQTT("RAWX data sent to MQTT");
             } else {
-                Serial.println(F("Couldn't send data to MQTT"));
+                logToMQTT("Couldn't send data to MQTT");
             }
             myGNSS.checkUblox();
             myGNSS.checkCallbacks();
@@ -540,9 +539,9 @@ void loop() {
     } else if (strcmp(mainMode, "RTK") == 0) {
         if (ntripCaster.connected() == false && runNtrip) {
             mqttClient.loop();
-            Serial.printf("Opening socket to %s\n", ntripHost);
+            logToMQTT("Opening socket to NTRIP host");
             if (ntripCaster.connect(ntripHost, atoi(ntripPort)) == true) {
-                Serial.printf("Connected to %s:%s\n", ntripHost, ntripPort);
+                logToMQTT("Connected to NTRIP host");
                 const int SERVER_BUFFER_SIZE = 512;
                 char serverRequest[SERVER_BUFFER_SIZE];
                 snprintf(
@@ -550,13 +549,11 @@ void loop() {
                     SERVER_BUFFER_SIZE,
                     "SOURCE %s /%s\r\nSource-Agent: NTRIP SparkFun u-blox Server v1.0\r\n\r\n",
                     ntripPassword, ntripMountPoint);
-                Serial.println(F("Sending server request:"));
-                Serial.println(serverRequest);
+                logToMQTT("Sending NTRIP server request");
                 ntripCaster.write(serverRequest, strlen(serverRequest));
                 unsigned long timeout = millis();
                 while (ntripCaster.available() == 0) {
                     if (millis() - timeout > 5000) {
-                        Serial.println(F("Caster timed out!"));
                         logToMQTT("Caster timed out");
                         ntripCaster.stop();
                         return;
@@ -577,12 +574,10 @@ void loop() {
                 }
                 response[responseSpot] = '\0';
                 if (connectionSuccess == false) {
-                    Serial.printf("Failed to connect to Caster: %s", response);
                     logToMQTT("Failed to connect to NTRIP caster");
                     return;
                 }
             } else {
-                Serial.println(F("Connection to host failed"));
                 logToMQTT("Connection to host failed");
                 return;
             }
@@ -590,13 +585,13 @@ void loop() {
         if (ntripCaster.connected() == true) {
             while (1) {
                 if ( !runNtrip) {
-                    Serial.println("Closing connection to ntrip server");
+                    logToMQTT("Closing connection to NTRIP caster");
                     ntripCaster.stop();
                     return;
                 }
                 myGNSS.checkUblox();
                 if (millis() - lastSentRTCM_ms > maxTimeBeforeHangup_ms) {
-                    Serial.println("RTCM timeout. Disconnecting...");
+                    logToMQTT("RTCM timeout, disconnecting");
                     ntripCaster.stop();
                     return;
                 }
@@ -618,12 +613,12 @@ void loop() {
     if (millis() - lastMillis > 60000) {
         // Send statistics if in PPP mode and collecting data
         if (strcmp(mainMode, "PPP") == 0 && collectRAWX) {
-            Serial.print(F("Number of message groups received: SFRBX: ")); // Print how many message groups have been received (see note above)
+            Serial.print(F("Number of message groups received: SFRBX: "));
             Serial.print(numSFRBX);
             Serial.print(F(" RAWX: "));
             Serial.println(numRAWX);
-            uint16_t maxBufferBytes = myGNSS.getMaxFileBufferAvail(); // Get how full the file buffer has been (not how full it is now)
-            Serial.print(F("The maximum number of bytes which the file buffer has contained is: ")); // It is a fun thing to watch how full the buffer gets
+            uint16_t maxBufferBytes = myGNSS.getMaxFileBufferAvail();
+            Serial.print(F("The maximum number of bytes which the file buffer has contained is: "));
             Serial.println(maxBufferBytes);
             if (maxBufferBytes > ((fileBufferSize / 5) * 4)) {
                 Serial.println(F("Warning: the file buffer has been over 80% full. Some data may have been lost."));
@@ -640,9 +635,9 @@ void loop() {
                     bytesToWrite = mqttSendMaxSize;
                 }
                 if (mqttClient.publish(mqttPppTopic, myBuffer, bytesToWrite)) {
-                    Serial.println(F("RAWX data sent to MQTT"));
+                    logToMQTT("RAWX data sent to MQTT");
                 } else {
-                    Serial.println(F("Couldn't send data to MQTT"));
+                    logToMQTT("Couldn't send data to MQTT");
                 }
                 myGNSS.extractFileBufferData(myBuffer, bytesToWrite);
                 remainingBytes -= bytesToWrite;
