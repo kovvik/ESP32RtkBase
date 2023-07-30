@@ -362,9 +362,9 @@ void setup() {
     WiFiManagerParameter customLatitude("latitude", "Latitude", latitude, sizeof(latitude));
     WiFiManagerParameter customLatitudeHP("latitudeHP", "Latitude (high precision)", latitudeHP, sizeof(latitudeHP));
     WiFiManagerParameter customLongitude("longitude", "Longitude", longitude, sizeof(longitude));
-    WiFiManagerParameter customLongitudeHP("longitudeHP", "Longitude (high precision)", longitude, sizeof(longitudeHP));
+    WiFiManagerParameter customLongitudeHP("longitudeHP", "Longitude (high precision)", longitudeHP, sizeof(longitudeHP));
     WiFiManagerParameter customAltitude("altitude", "Altitude", altitude, sizeof(altitude));
-    WiFiManagerParameter customAltitudeHP("altitudeHP", "Altitude (high precision)", altitude, sizeof(altitudeHP));
+    WiFiManagerParameter customAltitudeHP("altitudeHP", "Altitude (high precision)", altitudeHP, sizeof(altitudeHP));
     WiFiManagerParameter customNtripHost("ntripHost", "NTRIP Host:", ntripHost, sizeof(ntripHost));
     WiFiManagerParameter customNtripPort("ntripPort", "NTRIP Port:", ntripPort, sizeof(ntripPort));
     WiFiManagerParameter customNtripMountPoint("ntripMountPoint", "NTRIP Mount Point:", ntripMountPoint, sizeof(ntripMountPoint));
