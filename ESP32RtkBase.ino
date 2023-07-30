@@ -82,7 +82,7 @@ void logSettings() {
     StaticJsonDocument<512> logdata;
     logdata["time"] = getTime();
     logdata["host"] = host;
-    logdata["settings"] = getConfigJson(); 
+    logdata["settings"] = getConfigJson();
     serializeJson(logdata, out);
     mqttClient.publish(mqttLogTopic, out);
 }
@@ -188,7 +188,6 @@ void getConfigFromJson(char* configFile) {
     DeserializationError error = deserializeJson(configJson, configFile);
     if (!error) {
         Serial.println(F("The parsed json:"));
-        
         if (configJson["mqttServer"]) {
             strlcpy(mqttServer, configJson["mqttServer"], sizeof(mqttServer));
             Serial.print(F("mqttServer: "));
@@ -312,6 +311,20 @@ void newRAWX(UBX_RXM_RAWX_data_t *ubxDataStruct) {
     numRAWX++;
 }
 
+void reconnectAll() {
+    // Reconnect to mqtt server
+    if (!mqttClient.connected()) {
+        reconnect();
+    }
+    // Check wifi connection and reconnect if connection lost
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println(F("Lost connection, reconnecting to WiFi..."));
+        WiFi.disconnect();
+        WiFi.reconnect();
+    }
+    logStatus();
+}
+
 void setup() {
     delay(1000);
     // Starting serial
@@ -423,6 +436,7 @@ void setup() {
     strcpy(ntripMountPoint, customNtripMountPoint.getValue());
     strcpy(ntripPassword, customNtripPassword.getValue());
 
+
     // Setup NTP
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
@@ -503,9 +517,13 @@ void setup() {
     }
     Serial.println(F("u-blox setup completed."));
 
+    char * p = strchr (ntripHost, ' ');  // search for space
+    if (p)     // if found truncate at space
+        *p = '\0';
 }
 
 void loop() {
+    static uint32_t lastMillis = 0;
     if (strcmp(mainMode, "PPP") == 0 && collectRAWX) {
         myGNSS.checkUblox();
         myGNSS.checkCallbacks();
@@ -519,37 +537,99 @@ void loop() {
             myGNSS.checkUblox();
             myGNSS.checkCallbacks();
         }
-    } else if (strcmp(mainMode, "RTK") == 0 && runNtrip) {
-        
+    } else if (strcmp(mainMode, "RTK") == 0) {
+        if (ntripCaster.connected() == false && runNtrip) {
+            mqttClient.loop();
+            Serial.printf("Opening socket to %s\n", ntripHost);
+            if (ntripCaster.connect(ntripHost, atoi(ntripPort)) == true) {
+                Serial.printf("Connected to %s:%s\n", ntripHost, ntripPort);
+                const int SERVER_BUFFER_SIZE = 512;
+                char serverRequest[SERVER_BUFFER_SIZE];
+                snprintf(
+                    serverRequest,
+                    SERVER_BUFFER_SIZE,
+                    "SOURCE %s /%s\r\nSource-Agent: NTRIP SparkFun u-blox Server v1.0\r\n\r\n",
+                    ntripPassword, ntripMountPoint);
+                Serial.println(F("Sending server request:"));
+                Serial.println(serverRequest);
+                ntripCaster.write(serverRequest, strlen(serverRequest));
+                unsigned long timeout = millis();
+                while (ntripCaster.available() == 0) {
+                    if (millis() - timeout > 5000) {
+                        Serial.println(F("Caster timed out!"));
+                        logToMQTT("Caster timed out");
+                        ntripCaster.stop();
+                        return;
+                    }
+                    delay(10);
+                }
+                bool connectionSuccess = false;
+                char response[512];
+                int responseSpot = 0;
+                while (ntripCaster.available()) {
+                    response[responseSpot++] = ntripCaster.read();
+                    if (strstr(response, "200") != nullptr)
+                        connectionSuccess = true;
+                    if (responseSpot == 512 - 1) {
+                        logToMQTT("Connected to NTRIP caster");
+                        break;
+                    }
+                }
+                response[responseSpot] = '\0';
+                if (connectionSuccess == false) {
+                    Serial.printf("Failed to connect to Caster: %s", response);
+                    logToMQTT("Failed to connect to NTRIP caster");
+                    return;
+                }
+            } else {
+                Serial.println(F("Connection to host failed"));
+                logToMQTT("Connection to host failed");
+                return;
+            }
+        }
+        if (ntripCaster.connected() == true) {
+            while (1) {
+                if ( !runNtrip) {
+                    Serial.println("Closing connection to ntrip server");
+                    ntripCaster.stop();
+                    return;
+                }
+                myGNSS.checkUblox();
+                if (millis() - lastSentRTCM_ms > maxTimeBeforeHangup_ms) {
+                    Serial.println("RTCM timeout. Disconnecting...");
+                    ntripCaster.stop();
+                    return;
+                }
+                delay(10);
+                if (millis() - lastReport_ms > 250) {
+                    lastReport_ms += 250;
+                    Serial.printf("Total sent: %d\n", serverBytesSent);
+                }
+                if (millis() - lastMillis > 60000) {
+                    reconnectAll();
+                    lastMillis = millis();
+                }
+                mqttClient.loop();
+            }
+            delay(10);
+        }
     }
     // check Wifi connection every minute
-    static uint32_t lastMillis = 0;
     if (millis() - lastMillis > 60000) {
-        Serial.print(F("Number of message groups received: SFRBX: ")); // Print how many message groups have been received (see note above)
-        Serial.print(numSFRBX);
-        Serial.print(F(" RAWX: "));
-        Serial.println(numRAWX);
-
-        uint16_t maxBufferBytes = myGNSS.getMaxFileBufferAvail(); // Get how full the file buffer has been (not how full it is now)
-
-        Serial.print(F("The maximum number of bytes which the file buffer has contained is: ")); // It is a fun thing to watch how full the buffer gets
-        Serial.println(maxBufferBytes);
-
-        if (maxBufferBytes > ((fileBufferSize / 5) * 4)) {
-            Serial.println(F("Warning: the file buffer has been over 80% full. Some data may have been lost."));
+        // Send statistics if in PPP mode and collecting data
+        if (strcmp(mainMode, "PPP") == 0 && collectRAWX) {
+            Serial.print(F("Number of message groups received: SFRBX: ")); // Print how many message groups have been received (see note above)
+            Serial.print(numSFRBX);
+            Serial.print(F(" RAWX: "));
+            Serial.println(numRAWX);
+            uint16_t maxBufferBytes = myGNSS.getMaxFileBufferAvail(); // Get how full the file buffer has been (not how full it is now)
+            Serial.print(F("The maximum number of bytes which the file buffer has contained is: ")); // It is a fun thing to watch how full the buffer gets
+            Serial.println(maxBufferBytes);
+            if (maxBufferBytes > ((fileBufferSize / 5) * 4)) {
+                Serial.println(F("Warning: the file buffer has been over 80% full. Some data may have been lost."));
+            }
         }
-
-        // Reconnect to mqtt server
-        if (!mqttClient.connected()) {
-            reconnect();
-        }
-        // Check wifi connection and reconnect if connection lost
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println(F("Lost connection, reconnecting to WiFi..."));
-            WiFi.disconnect();
-            WiFi.reconnect();
-        }
-        logStatus();
+        reconnectAll();
         lastMillis = millis();
     } else {
         if (strcmp(mainMode, "PPP") == 0 && !collectRAWX) {
@@ -569,5 +649,14 @@ void loop() {
             }
         }
         mqttClient.loop();
+    }
+}
+
+void DevUBLOXGNSS::processRTCM(uint8_t incoming)
+{
+    if (ntripCaster.connected() == true) {
+        ntripCaster.write(incoming); //Send this byte to socket
+        serverBytesSent++;
+        lastSentRTCM_ms = millis();
     }
 }
