@@ -25,8 +25,7 @@ SFE_UBLOX_GNSS myGNSS;
 uint8_t *myBuffer;
 int numSFRBX = 0;
 int numRAWX = 0;
-bool collectRAWX = false;
-bool runNtrip = false;
+bool mainModeRunning = false;
 
 // RTK Variables
 WiFiClient ntripCaster;
@@ -120,18 +119,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         saveConfigToFile();
         delay(5000);
         ESP.restart();
-    } else if ( strcmp(message, "START_PPP") == 0 ) {
+    } else if ( strcmp(message, "START") == 0 ) {
         logToMQTT("Starting RAWX collection");
-        collectRAWX = true;
-    } else if ( strcmp(message, "STOP_PPP") == 0 ) {
+        mainModeRunning = true;
+        saveConfigToFile();
+    } else if ( strcmp(message, "STOP") == 0 ) {
         logToMQTT("Stopping RAWX collection");
-        collectRAWX = false;
-    } else if ( strcmp(message, "START_RTK") == 0 ) {
-        logToMQTT("Starting ntrip server");
-        runNtrip = true;
-    } else if ( strcmp(message, "STOP_RTK") == 0 ) {
-        logToMQTT("Stopping ntrip server");
-        runNtrip = false;
+        mainModeRunning = false;
+        saveConfigToFile();
     } else if (strncmp(message, "SETTINGS:", 9) == 0) {
         logToMQTT("New settings received");
         int settingsLength = sizeof(message) - 9;
@@ -183,6 +178,7 @@ DynamicJsonDocument getConfigJson() {
     jsonConfig["ntripPort"] = ntripPort;
     jsonConfig["ntripMountPoint"] = ntripMountPoint;
     jsonConfig["ntripPassword"] = ntripPassword;
+    jsonConfig["mainModeRunning"] = mainModeRunning;
     return jsonConfig;
 }
 
@@ -271,6 +267,14 @@ void getConfigFromJson(char* configFile) {
             strlcpy(ntripPassword, configJson["ntripPassword"], sizeof(ntripPassword));
             Serial.print(F("ntripPassword: "));
             Serial.println(ntripPassword);
+        }
+        if (configJson["mainModeRunning"]) {
+            mainModeRunning = configJson["mainModeRunning"];
+            Serial.print(F("mainModeRunning: "));
+            if (configJson["mainModeRunning"])
+                Serial.println("true");
+            else
+                Serial.println("false");
         }
     } else {
         Serial.print(F("Json parse error: "));
@@ -523,7 +527,7 @@ void setup() {
 
 void loop() {
     static uint32_t lastMillis = 0;
-    if (strcmp(mainMode, "PPP") == 0 && collectRAWX) {
+    if (strcmp(mainMode, "PPP") == 0 && mainModeRunning) {
         myGNSS.checkUblox();
         myGNSS.checkCallbacks();
         while (myGNSS.fileBufferAvailable() >= mqttSendMaxSize) {
@@ -537,7 +541,7 @@ void loop() {
             myGNSS.checkCallbacks();
         }
     } else if (strcmp(mainMode, "RTK") == 0) {
-        if (ntripCaster.connected() == false && runNtrip) {
+        if (ntripCaster.connected() == false && mainModeRunning) {
             mqttClient.loop();
             logToMQTT("Opening socket to NTRIP host");
             if (ntripCaster.connect(ntripHost, atoi(ntripPort)) == true) {
@@ -584,7 +588,7 @@ void loop() {
         }
         if (ntripCaster.connected() == true) {
             while (1) {
-                if ( !runNtrip) {
+                if ( !mainModeRunning) {
                     logToMQTT("Closing connection to NTRIP caster");
                     ntripCaster.stop();
                     return;
@@ -612,7 +616,7 @@ void loop() {
     // check Wifi connection every minute
     if (millis() - lastMillis > 60000) {
         // Send statistics if in PPP mode and collecting data
-        if (strcmp(mainMode, "PPP") == 0 && collectRAWX) {
+        if (strcmp(mainMode, "PPP") == 0 && mainModeRunning) {
             Serial.print(F("Number of message groups received: SFRBX: "));
             Serial.print(numSFRBX);
             Serial.print(F(" RAWX: "));
@@ -627,7 +631,7 @@ void loop() {
         reconnectAll();
         lastMillis = millis();
     } else {
-        if (strcmp(mainMode, "PPP") == 0 && !collectRAWX) {
+        if (strcmp(mainMode, "PPP") == 0 && !mainModeRunning) {
             uint16_t remainingBytes = myGNSS.fileBufferAvailable();
             while (remainingBytes > 0) {
                 uint16_t bytesToWrite = remainingBytes;
