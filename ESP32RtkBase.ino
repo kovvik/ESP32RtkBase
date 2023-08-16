@@ -32,7 +32,6 @@ WiFiClient ntripCaster;
 long lastSentRTCM_ms = 0;
 int maxTimeBeforeHangup_ms = 10000;
 uint32_t serverBytesSent = 0;
-long lastReport_ms = 0;
 
 // MQTT Client
 WiFiClientSecure espClient;
@@ -67,11 +66,22 @@ void logToMQTT(char message[512]) {
 // sends status information to MQTT log topic
 void logStatus() {
     // Log data
-    char wifiRSSI[5];
-    char message[20] = "WiFi RSSI:";
-    sprintf(wifiRSSI, "%d", WiFi.RSSI());
-    strcat(message, wifiRSSI);
-    logToMQTT(message);
+    char out[512];
+    StaticJsonDocument<512> logdata;
+    logdata["time"] = getTime();
+    logdata["host"] = host;
+    logdata["monitoring_data"]["wifi_rssi"] = WiFi.RSSI();
+    logdata["monitoring_data"]["main_mode"] = mainMode;
+    logdata["monitoring_data"]["main_mode_running"] = mainModeRunning;
+    logdata["monitoring_data"]["num_sfrbx_messages"] = numSFRBX;
+    logdata["monitoring_data"]["num_rawx_messages"] = numRAWX;
+    logdata["monitoring_data"]["rtcm_bytes_sent"] = serverBytesSent;
+    logdata["monitoring_data"]["antenna_status"] = myGNSS.getAntennaStatus();
+    logdata["monitoring_data"]["satellites_in_view"] = myGNSS.getSIV(1000);
+    logdata["monitoring_data"]["gnss_fix_type"] = myGNSS.getFixType(1000);
+    logdata["monitoring_data"]["gnss_fix_ok"] = myGNSS.getGnssFixOk(1000);
+    serializeJson(logdata, out);
+    mqttClient.publish(mqttLogTopic, out);
 }
 
 // logs settings to MQTT log topic
@@ -314,12 +324,10 @@ unsigned long getTime() {
 }
 
 void newSFRBX(UBX_RXM_SFRBX_data_t *ubxDataStruct) {
-    Serial.println(F("SFRBX data arrived"));
     numSFRBX++;
 }
 
 void newRAWX(UBX_RXM_RAWX_data_t *ubxDataStruct) {
-    Serial.println(F("RAWX data arrived"));
     numRAWX++;
 }
 
@@ -602,10 +610,6 @@ void loop() {
                     return;
                 }
                 delay(10);
-                if (millis() - lastReport_ms > 250) {
-                    lastReport_ms += 250;
-                    Serial.printf("Total sent: %d\n", serverBytesSent);
-                }
                 if (millis() - lastMillis > 60000) {
                     reconnectAll();
                     lastMillis = millis();
