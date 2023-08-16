@@ -110,12 +110,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     } else if ( strcmp(message, "MODE_RTK") == 0 ) {
         logToMQTT("Setting main mode to RTK");
         strcpy(mainMode, "RTK");
+        mainModeRunning = false;
         saveConfigToFile();
         delay(5000);
         ESP.restart();
     } else if ( strcmp(message, "MODE_PPP") == 0 ) {
         logToMQTT("Setting main mode to PPP");
         strcpy(mainMode, "PPP");
+        mainModeRunning = false;
         saveConfigToFile();
         delay(5000);
         ESP.restart();
