@@ -1,3 +1,52 @@
+/*
+   ESP32RtkBase
+
+   This ESP32 sketch creates an RTK Base Station. It needs an ublox ZED-F9P
+   based GNSS module connected to the ESP32 with I2C. The sketch uses SparkFun's
+   u-blox GNSS V3 Library and parts of the code based on the examples.
+
+   Configuration is included from settings.h
+
+   It uses MQTT connection for logging, accepting commands and saving PPP raw data.
+
+   There are two main modes:
+        * PPP:  It logs data to an MQTT topic that can be used to calculate the precise
+                position of the base station. The topic to send can be set with
+                mqttPppTopic setting.
+        * RTK:  It serves as an RTK Base Station and sends NTRIP data to a caster.
+                To use it as a Base, it should know the precise position of the
+                antenna.
+                The NTRIP caster settngs are:
+                    ntripHost
+                    ntripPort
+                    ntripMountPoint
+                    ntripPassword
+                The position data settings are:
+                    latitude
+                    latitudeHP
+                    longitude
+                    longitudeHP
+                    altitude
+                    altitudeHP
+
+    Commands can be sent through the MQTT command topic:
+        * 'PING'        It is used to check the base station. It sends a response
+                        to the MQTT log topic with the current settings.
+        * 'REBOOT'      Reboots the ESP32
+        * 'RESET'       Resets all ESP32 settings to defaults and formats the SPIFFS
+        * 'MODE_RTK'    Sets the main mode to RTK and reboots the ESP32
+        * 'MODE_PPP'    Sets the main mode to PPP and reboots the ESP32
+        * 'START'       Starts the data collection. In PPP mode it sends the RAWX data
+                        to an MQTT topic. In RTK mode it sends NTRIP data to a caster
+        * 'STOP'        Stops the data collection
+        * 'SETTINGS:{}' This command can be used to update any settings. The new settings
+                        should be in json format.
+                        Ex.:
+                            'SETTINGS:{"ntripHost": "example.com"}'
+
+    The sketch publishes logs and monitoring data (per minute) to an MQTT
+    log topic (mqttLogTopic setting).
+*/
 #include <FS.h>
 #include <WiFiClientSecure.h>
 #include <WiFiManager.h>
@@ -37,6 +86,9 @@ uint32_t serverBytesSent = 0;
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
 WiFiManager wifiManager;
+
+// Save config to file
+bool save_config = true;
 
 // MQTT reconnect
 void reconnect() {
@@ -132,11 +184,11 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         delay(5000);
         ESP.restart();
     } else if ( strcmp(message, "START") == 0 ) {
-        logToMQTT("Starting RAWX collection");
+        logToMQTT("Starting the data collection");
         mainModeRunning = true;
         saveConfigToFile();
     } else if ( strcmp(message, "STOP") == 0 ) {
-        logToMQTT("Stopping RAWX collection");
+        logToMQTT("Stopping the data collection");
         mainModeRunning = false;
         saveConfigToFile();
     } else if (strncmp(message, "SETTINGS:", 9) == 0) {
@@ -151,9 +203,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         logToMQTT("Unknown command received");
     }
 }
-
-// Save config to file
-bool save_config = true;
 
 // Gets ESP info and prints to serial
 void getESPInfo() {
@@ -314,13 +363,12 @@ void saveConfigToFile() {
 
 // Returns current epoch
 unsigned long getTime() {
-  time_t now;
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
-    return(0);
-  }
-  time(&now);
-  return now;
+    time_t now;
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo))
+        return(0);
+    time(&now);
+    return now;
 }
 
 void newSFRBX(UBX_RXM_SFRBX_data_t *ubxDataStruct) {
@@ -332,7 +380,7 @@ void newRAWX(UBX_RXM_RAWX_data_t *ubxDataStruct) {
 }
 
 void reconnectAll() {
-    // Reconnect to mqtt server
+    // Reconnect to the mqtt server
     if (!mqttClient.connected()) {
         reconnect();
     }
@@ -538,6 +586,7 @@ void setup() {
 void loop() {
     static uint32_t lastMillis = 0;
     if (strcmp(mainMode, "PPP") == 0 && mainModeRunning) {
+        // main mode is PPP and data collection is started
         myGNSS.checkUblox();
         myGNSS.checkCallbacks();
         while (myGNSS.fileBufferAvailable() >= mqttSendMaxSize) {
@@ -551,7 +600,9 @@ void loop() {
             myGNSS.checkCallbacks();
         }
     } else if (strcmp(mainMode, "RTK") == 0) {
+        // main mode is RTK
         if (ntripCaster.connected() == false && mainModeRunning) {
+            // Connecting to NTRIP caster
             mqttClient.loop();
             logToMQTT("Opening socket to NTRIP host");
             if (ntripCaster.connect(ntripHost, atoi(ntripPort)) == true) {
@@ -597,6 +648,7 @@ void loop() {
             }
         }
         if (ntripCaster.connected() == true) {
+            // Sending data to NTRIP caster
             while (1) {
                 if ( !mainModeRunning) {
                     logToMQTT("Closing connection to NTRIP caster");
@@ -657,8 +709,7 @@ void loop() {
     }
 }
 
-void DevUBLOXGNSS::processRTCM(uint8_t incoming)
-{
+void DevUBLOXGNSS::processRTCM(uint8_t incoming) {
     if (ntripCaster.connected() == true) {
         ntripCaster.write(incoming); //Send this byte to socket
         serverBytesSent++;
