@@ -89,6 +89,7 @@ WiFiManager wifiManager;
 
 // Save config to file
 bool save_config = true;
+UBaseType_t uxHighWaterMark;
 
 // MQTT reconnect
 void reconnect() {
@@ -125,6 +126,7 @@ void logStatus() {
     logdata["monitoring_data"]["wifi_rssi"] = WiFi.RSSI();
     logdata["monitoring_data"]["main_mode"] = mainMode;
     logdata["monitoring_data"]["main_mode_running"] = mainModeRunning;
+    logdata["monitoring_data"]["ntrip_caster_connected"] = ntripCaster.connected();
     logdata["monitoring_data"]["num_sfrbx_messages"] = numSFRBX;
     logdata["monitoring_data"]["num_rawx_messages"] = numRAWX;
     logdata["monitoring_data"]["rtcm_bytes_sent"] = serverBytesSent;
@@ -132,6 +134,9 @@ void logStatus() {
     logdata["monitoring_data"]["satellites_in_view"] = myGNSS.getSIV(1000);
     logdata["monitoring_data"]["gnss_fix_type"] = myGNSS.getFixType(1000);
     logdata["monitoring_data"]["gnss_fix_ok"] = myGNSS.getGnssFixOk(1000);
+    logdata["monitoring_data"]["Free Stack Space"] = uxHighWaterMark;
+    logdata["monitoring_data"]["spiffs_total_bytes"] = SPIFFS.totalBytes();
+    logdata["monitoring_data"]["spiffs_used_bytes"] = SPIFFS.usedBytes();
     serializeJson(logdata, out);
     mqttClient.publish(mqttLogTopic, out);
 }
@@ -394,6 +399,15 @@ void reconnectAll() {
 }
 
 void setup() {
+    pinMode(12, OUTPUT);
+    pinMode(14, OUTPUT);
+    pinMode(27, OUTPUT);
+    pinMode(26, OUTPUT);
+
+    digitalWrite(12, LOW);
+    digitalWrite(14, LOW);
+    digitalWrite(26, LOW);
+    digitalWrite(27, LOW);
     delay(1000);
     // Starting serial
     Serial.begin(115200);
@@ -674,6 +688,7 @@ void loop() {
     // check Wifi connection every minute
     if (millis() - lastMillis > 60000) {
         // Send statistics if in PPP mode and collecting data
+        uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
         if (strcmp(mainMode, "PPP") == 0 && mainModeRunning) {
             Serial.print(F("Number of message groups received: SFRBX: "));
             Serial.print(numSFRBX);
