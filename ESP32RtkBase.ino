@@ -385,17 +385,21 @@ void newRAWX(UBX_RXM_RAWX_data_t *ubxDataStruct) {
 }
 
 void reconnectAll() {
-    // Reconnect to the mqtt server
-    if (!mqttClient.connected()) {
-        reconnect();
-    }
     // Check wifi connection and reconnect if connection lost
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println(F("Lost connection, reconnecting to WiFi..."));
         WiFi.disconnect();
         WiFi.reconnect();
+        delay(5000);
+        return;
     }
-    logStatus();
+    Serial.println("Check if connected to mqtt");
+    if (mqttClient.connected()) {
+        logStatus();
+    } else {
+        // Reconnect to the mqtt server
+        reconnect();
+    }
 }
 
 void setup() {
@@ -613,6 +617,7 @@ void loop() {
             myGNSS.checkUblox();
             myGNSS.checkCallbacks();
         }
+        logToMQTT("PPP Mode running");
     } else if (strcmp(mainMode, "RTK") == 0) {
         // main mode is RTK
         if (ntripCaster.connected() == false && mainModeRunning) {
